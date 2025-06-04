@@ -5,9 +5,12 @@ import (
 	"net/http"
 )
 
+func handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello from Go Backend")
+}
+
 func main() {
-	http.HandleFunc("/api/hello", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "Hello from Go backend!")
-	})
+	http.HandleFunc("/", handler)
+	fmt.Println("Server running at http://localhost:8080")
 	http.ListenAndServe(":8080", nil)
 }
