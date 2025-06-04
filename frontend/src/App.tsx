@@ -1,16 +1,8 @@
 import React from 'react';
 import logo from './logo.svg';
 import './App.css';
-import { useEffect, useState } from 'react';
 
 function App() {
-  const [msg, setMsg] = useState("");
-
-  useEffect(() => {
-    fetch("/api/hello")
-      .then(res => res.text())
-      .then(setMsg);
-  }, []);
   return (
     <div className="App">
       <header className="App-header">
@@ -25,7 +17,6 @@ function App() {
           rel="noopener noreferrer"
         >
           Learn React
-          {msg}
         </a>
       </header>
     </div>
