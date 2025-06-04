@@ -1,0 +1,12 @@
+FROM golang:1.22
+
+WORKDIR /app
+
+COPY backend/go.mod ./
+RUN go mod tidy
+
+COPY backend/ .
+
+RUN go build -o main .
+
+CMD ["./main"]
