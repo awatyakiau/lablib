@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=production
+      - VITE_HOST=0.0.0.0
+    restart: always
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+    working_dir: /app
+    command: ["go", "run", "main.go"]
+    depends_on:
+      - db
+      - app
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=labuser
+      - DB_PASSWORD=labpass
+      - DB_NAME=lablib
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: labuser
+      POSTGRES_PASSWORD: labpass
+      POSTGRES_DB: lablib
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+volumes:
+  db_data: 
