@@ -5,12 +5,12 @@ import { useAuth } from '../contexts/AuthContext';
 
 const AdminPage: React.FC = () => {
   const { user } = useAuth();
-  
+
   // Redirect non-admin users
   if (user?.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
-  
+
   return <AdminPanel />;
 };
 
