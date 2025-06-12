@@ -33,4 +33,4 @@ type LoginRequest struct {
 type LoginResponse struct {
 	Token string       `json:"token"`
 	User  UserResponse `json:"user"`
-} 
+}

@@ -30,16 +30,16 @@ type BookCopy struct {
 }
 
 type BorrowRecord struct {
-	ID           uuid.UUID  `json:"id"`
-	UserID       uuid.UUID  `json:"user_id"`
-	BookCopyID   uuid.UUID  `json:"book_copy_id"`
-	BorrowedAt   time.Time  `json:"borrowed_at"`
-	DueDate      time.Time  `json:"due_date"`
-	ReturnedAt   *time.Time `json:"returned_at,omitempty"`
-	Status       string     `json:"status"`
-	Book         Book       `json:"book"`
-	BookCopy     BookCopy   `json:"book_copy"`
-	User         User       `json:"user"`
+	ID         uuid.UUID  `json:"id"`
+	UserID     uuid.UUID  `json:"user_id"`
+	BookCopyID uuid.UUID  `json:"book_copy_id"`
+	BorrowedAt time.Time  `json:"borrowed_at"`
+	DueDate    time.Time  `json:"due_date"`
+	ReturnedAt *time.Time `json:"returned_at,omitempty"`
+	Status     string     `json:"status"`
+	Book       Book       `json:"book"`
+	BookCopy   BookCopy   `json:"book_copy"`
+	User       User       `json:"user"`
 }
 
 type AdminLog struct {
@@ -56,4 +56,4 @@ type MonthlyRanking struct {
 	BookID      uuid.UUID `json:"book_id"`
 	BorrowCount int       `json:"borrow_count"`
 	Book        Book      `json:"book"`
-} 
+}

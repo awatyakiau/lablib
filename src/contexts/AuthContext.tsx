@@ -37,7 +37,7 @@ const mockLogin = async (credentials: LoginCredentials): Promise<AuthResponse> =
       }
     };
   }
-  
+
   throw new Error('Invalid credentials');
 };
 
@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   useEffect(() => {
     // Check for saved auth on load
     const savedAuth = localStorage.getItem('lablib-auth');
