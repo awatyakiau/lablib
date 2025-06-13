@@ -143,7 +143,7 @@ const UserRegistration: React.FC = () => {
   const confirmDelete = async () => {
     if (selectedUser) {
       try {
-        await axios.delete(`/api/admin/users/${selectedUser}`);
+        await axios.delete(`/api/admin/users${selectedUser}`);
         
         // ユーザー一覧を更新
         setUsers(prev => prev.filter(user => user.id !== selectedUser));
