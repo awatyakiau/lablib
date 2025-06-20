@@ -14,6 +14,7 @@ import (
 
 func CreateBook(c *gin.Context) {
 	var book models.Book
+
 	if err := c.ShouldBindJSON(&book); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

@@ -29,7 +29,7 @@ const mockLogin = async (credentials: LoginCredentials): Promise<AuthResponse> =
     };
   } else if (credentials.studentId === '00999999' && credentials.password === 'Dependable61204') {
     return {
-      token: 'mock-token-admin',
+      token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiYWRtaW4iLCJhZG1pbiI6dHJ1ZSwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgxODU4NjM0fQ.rRriTQpCxIDAAx_BMZTFGnRfcFjXIlLRJqaWjYx9H6s',
       user: {
         id: '00999999',
         name: '管理者さん',

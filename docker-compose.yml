@@ -26,6 +26,7 @@ services:
       - app
     restart: always
     environment:
+      - SECRET_KEY=048af2438891a89a3536ac09cc96ccbd34a1714e88cf8fdb63e6186dcc3ff89d
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=labuser

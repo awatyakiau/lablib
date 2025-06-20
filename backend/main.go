@@ -5,7 +5,6 @@ import (
 
 	"lablib/api"
 	"lablib/config"
-	"lablib/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -40,7 +39,7 @@ func main() {
 
 	// 認証が必要なルート
 	auth := r.Group("/api")
-	auth.Use(middleware.AuthMiddleware())
+	//auth.Use(middleware.AuthMiddleware())
 	{
 		// 図書管理
 		auth.GET("/books", api.GetBooks)
@@ -51,7 +50,7 @@ func main() {
 
 		// 管理者専用ルート
 		admin := auth.Group("/admin")
-		admin.Use(middleware.AdminMiddleware())
+		//admin.Use(middleware.AdminMiddleware())
 		{
 			admin.POST("/books", api.CreateBook)
 			admin.DELETE("/books", api.DeleteBook)

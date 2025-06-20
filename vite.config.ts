@@ -10,7 +10,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://backend:8080', // docker-compose.ymlのサービス名とポート
+        target: 'http://lablib-backend-1:8080', // docker-compose.ymlのサービス名とポート
         changeOrigin: true,
         secure: false,
       },
