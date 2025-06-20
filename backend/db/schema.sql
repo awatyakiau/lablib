@@ -50,13 +50,12 @@ CREATE TABLE IF NOT EXISTS borrow_records (
 );
 
 -- 管理者ログテーブル
-CREATE TABLE IF NOT EXISTS admin_logs (
+/*CREATE TABLE IF NOT EXISTS admin_logs (
     id UUID PRIMARY KEY,
-    admin_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     action TEXT NOT NULL,
     target_id UUID,
     created_at TIMESTAMP NOT NULL
-);
+);*/
 
 -- 月次ランキングテーブル
 CREATE TABLE IF NOT EXISTS monthly_rankings (

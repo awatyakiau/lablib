@@ -64,17 +64,17 @@ func CreateBook(c *gin.Context) {
 	}
 
 	// 管理者ログの記録
-	adminID, _ := c.Get("user_id")
-	_, err = tx.Exec(`
-		INSERT INTO admin_logs (id, admin_id, action, target_id, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`,
-		uuid.New(), adminID, "create_book", book.ID, time.Now(),
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
-		return
-	}
+	/*
+		_, err = tx.Exec(`
+			INSERT INTO admin_logs (id, action, target_id, created_at)
+			VALUES ($1, $2, $3, $4, $5)
+		`,
+			uuid.New(), "create_book", book.ID, time.Now(),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
+			return
+		}*/
 
 	// トランザクションのコミット
 	if err := tx.Commit(); err != nil {
@@ -104,17 +104,17 @@ func DeleteBook(c *gin.Context) {
 	}
 
 	// 管理者ログの記録
-	adminID, _ := c.Get("user_id")
-	_, err = tx.Exec(`
-		INSERT INTO admin_logs (id, admin_id, action, target_id, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`,
-		uuid.New(), adminID, "delete_book", bookID, time.Now(),
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
-		return
-	}
+	/*
+		_, err = tx.Exec(`
+			INSERT INTO admin_logs (id, action, target_id, created_at)
+			VALUES ($1, $2, $3, $4, $5)
+		`,
+			uuid.New(), "delete_book", bookID, time.Now(),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
+			return
+		}*/
 
 	// トランザクションのコミット
 	if err := tx.Commit(); err != nil {
@@ -179,17 +179,17 @@ func CreateUser(c *gin.Context) {
 	}
 
 	// 管理者ログの記録
-	adminID, _ := c.Get("user_id")
-	_, err = tx.Exec(`
-		INSERT INTO admin_logs (id, admin_id, action, target_id, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`,
-		uuid.New(), adminID, "create_user", user.ID, time.Now(),
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
-		return
-	}
+	/*
+		_, err = tx.Exec(`
+			INSERT INTO admin_logs (id, action, target_id, created_at)
+			VALUES ($1, $2, $3, $4, $5)
+		`,
+			uuid.New(), "create_user", user.ID, time.Now(),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
+			return
+		}*/
 
 	// トランザクションのコミット
 	if err := tx.Commit(); err != nil {
@@ -203,7 +203,12 @@ func CreateUser(c *gin.Context) {
 }
 
 func DeleteUser(c *gin.Context) {
-	userID := c.PostForm("user_id")
+	userID := c.Param("id")
+
+	if userID == "" {
+		c.JSON(400, gin.H{"error": "id is required"})
+		return
+	}
 
 	// トランザクション開始
 	tx, err := config.DB.Begin()
@@ -211,6 +216,7 @@ func DeleteUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not start transaction"})
 		return
 	}
+
 	defer tx.Rollback()
 
 	// ユーザーの削除
@@ -221,17 +227,17 @@ func DeleteUser(c *gin.Context) {
 	}
 
 	// 管理者ログの記録
-	adminID, _ := c.Get("user_id")
-	_, err = tx.Exec(`
-		INSERT INTO admin_logs (id, admin_id, action, target_id, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`,
-		uuid.New(), adminID, "delete_user", userID, time.Now(),
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
-		return
-	}
+	/*
+		_, err = tx.Exec(`
+			INSERT INTO admin_logs (id, action, target_id, created_at)
+			VALUES ($1, $2, $3, $4, $5)
+		`,
+			uuid.New(), "delete_user", userID, time.Now(),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
+			return
+		}*/
 
 	// トランザクションのコミット
 	if err := tx.Commit(); err != nil {
