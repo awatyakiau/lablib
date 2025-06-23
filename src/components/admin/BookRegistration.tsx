@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import BarcodeScanner from '../books/BarcodeScanner';
 import { BookPlus, Save, Trash } from 'lucide-react';
+import axios from 'axios';
 
 interface FormData {
   title: string;
@@ -53,32 +54,50 @@ const BookRegistration: React.FC = () => {
     }
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validation
-    if (!formData.title.trim()) {
-      setError('タイトルを入力してください');
-      return;
-    }
-    if (!formData.author.trim()) {
-      setError('著者を入力してください');
-      return;
-    }
-    if (!formData.barcode.trim()) {
-      setError('バーコードを入力してください');
-      return;
-    }
-    if (!formData.location.trim()) {
-      setError('保管場所を入力してください');
-      return;
-    }
-    
-    // In a real app, we would save this to the backend
-    // For now, just simulate a successful registration
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  // Validation
+  if (!formData.title.trim()) {
+    setError('タイトルを入力してください');
+    return;
+  }
+  if (!formData.author.trim()) {
+    setError('著者を入力してください');
+    return;
+  }
+  if (!formData.barcode.trim()) {
+    setError('バーコードを入力してください');
+    return;
+  }
+  if (!formData.location.trim()) {
+    setError('保管場所を入力してください');
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.post(
+      '/api/admin/books',
+      {
+        title: formData.title,
+        author: formData.author,
+        type: formData.type,
+        barcode: formData.barcode,
+        isbn: formData.isbn,
+        location: formData.location,
+        total_copies: formData.copies,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
     setSuccess('アイテムが正常に登録されました');
     setError(null);
-    
+
     // Reset form after a delay
     setTimeout(() => {
       setFormData({
@@ -88,11 +107,19 @@ const BookRegistration: React.FC = () => {
         barcode: '',
         isbn: '',
         location: '',
-        copies: 1
+        copies: 1,
       });
       setSuccess(null);
     }, 3000);
-  };
+  } catch (err: any) {
+    if (err.response?.data?.error) {
+      setError(err.response.data.error);
+    } else {
+      setError('登録に失敗しました');
+    }
+  }
+};
+
   
   const handleReset = () => {
     setFormData({

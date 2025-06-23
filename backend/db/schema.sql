@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS books (
     isbn VARCHAR(13),
     jan VARCHAR(13),
     ean13 VARCHAR(13),
-    type VARCHAR(10) NOT NULL CHECK (type IN ('book', 'paper')),
+    type VARCHAR(10) NOT NULL CHECK (type IN ('book', 'thesis')),
     total_copies INTEGER NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
