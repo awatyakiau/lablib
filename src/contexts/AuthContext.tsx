@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { User, LoginCredentials, AuthResponse } from '../types';
+import axios from 'axios';
 
 interface AuthContextType {
   user: User | null;
@@ -65,18 +66,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     
     try {
-      const response = await mockLogin(credentials);
-      setUser(response.user);
-      localStorage.setItem('lablib-auth', JSON.stringify({
-        token: response.token,
-        user: response.user
-      }));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
+    // studentId → student_id に変換して送信
+    const response = await axios.post('/api/auth/login', {
+      student_id: credentials.studentId,
+      password: credentials.password,
+    });
+
+    const { token, user } = response.data;
+    setUser(user);
+    localStorage.setItem('lablib-auth', JSON.stringify({
+      token,
+      user,
+    }));
+  } catch (err: any) {
+    if (err.response?.data?.error) {
+      setError(err.response.data.error);
+    } else {
+      setError('ログインに失敗しました');
     }
-  };
+  } finally {
+    setIsLoading(false);
+  }
+};
   
   const logout = () => {
     setUser(null);
