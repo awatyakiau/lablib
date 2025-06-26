@@ -54,7 +54,7 @@ function App() {
               <Route index element={<SearchPage />} />
               <Route path="books" element={<BooksPage />} />
               <Route path="thesis" element={<BooksPage />} />
-              <Route path="items/:id" element={<BookDetailsPage />} />
+              <Route path="books/:id" element={<BookDetailsPage />} />
               <Route path="borrow" element={<BorrowReturnPage />} />
               <Route path="history" element={<HistoryPage />} />
               <Route path="ranking" element={<RankingPage />} />

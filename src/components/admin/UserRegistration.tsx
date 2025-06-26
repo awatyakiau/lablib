@@ -31,14 +31,21 @@ const UserRegistration: React.FC = () => {
   
   // ユーザー一覧の取得
   const fetchUsers = async () => {
-    try {
-      const response = await axios.get('/api/admin/users');
-      const data = response.data;
-      setUsers(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError('ユーザー一覧の取得に失敗しました');
-    }
-  };
+  try {
+    const response = await axios.get('/api/admin/users');
+    const data = response.data;
+    // student_id → studentId へ変換
+    const users = Array.isArray(data)
+      ? data.map((u) => ({
+          ...u,
+          studentId: u.student_id, // ← ここで変換
+        }))
+      : [];
+    setUsers(users);
+  } catch (err) {
+    setError('ユーザー一覧の取得に失敗しました');
+  }
+};
 
   // コンポーネントマウント時にユーザー一覧を取得
   React.useEffect(() => {

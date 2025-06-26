@@ -5,39 +5,57 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"lablib/config"
 	"lablib/models"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func GetBooks(c *gin.Context) {
 	query := c.Query("query")
 	rows, err := config.DB.Query(`
-		SELECT id, title, author, isbn, jan, ean13, type, total_copies, created_at, updated_at
-		FROM books
-		WHERE title ILIKE $1 OR author ILIKE $1 OR isbn ILIKE $1 OR jan ILIKE $1 OR ean13 ILIKE $1
-		ORDER BY title
-	`, "%"+query+"%")
+        SELECT
+            b.id, b.title, b.author, b.isbn, b.jan, b.ean13, b.type, b.total_copies, b.created_at, b.updated_at,
+            COUNT(bc.id) FILTER (WHERE bc.is_available = true) AS available_copies
+        FROM books b
+        LEFT JOIN book_copies bc ON bc.book_id = b.id
+        WHERE b.title ILIKE $1 OR b.author ILIKE $1 OR b.isbn ILIKE $1 OR b.jan ILIKE $1 OR b.ean13 ILIKE $1
+        GROUP BY b.id
+        ORDER BY b.title
+    `, "%"+query+"%")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 	defer rows.Close()
 
-	var books []models.Book
+	var books []map[string]interface{}
 	for rows.Next() {
 		var book models.Book
+		var availableCopies int
 		err := rows.Scan(
 			&book.ID, &book.Title, &book.Author, &book.ISBN,
 			&book.JAN, &book.EAN13, &book.Type, &book.TotalCopies,
-			&book.CreatedAt, &book.UpdatedAt,
+			&book.CreatedAt, &book.UpdatedAt, &availableCopies,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning books"})
 			return
 		}
-		books = append(books, book)
+		books = append(books, map[string]interface{}{
+			"id":           book.ID,
+			"title":        book.Title,
+			"author":       book.Author,
+			"isbn":         book.ISBN,
+			"jan":          book.JAN,
+			"ean13":        book.EAN13,
+			"type":         book.Type,
+			"total_copies": book.TotalCopies,
+			"created_at":   book.CreatedAt,
+			"updated_at":   book.UpdatedAt,
+			"available":    availableCopies > 0, // ← ここで貸出可否を返す
+		})
 	}
 
 	c.JSON(http.StatusOK, books)
@@ -47,10 +65,10 @@ func GetBookDetails(c *gin.Context) {
 	bookID := c.Param("id")
 	var book models.Book
 	err := config.DB.QueryRow(`
-		SELECT id, title, author, isbn, jan, ean13, type, total_copies, created_at, updated_at
-		FROM books
-		WHERE id = $1
-	`, bookID).Scan(
+        SELECT id, title, author, isbn, jan, ean13, type, total_copies, created_at, updated_at
+        FROM books
+        WHERE id = $1
+    `, bookID).Scan(
 		&book.ID, &book.Title, &book.Author, &book.ISBN,
 		&book.JAN, &book.EAN13, &book.Type, &book.TotalCopies,
 		&book.CreatedAt, &book.UpdatedAt,
@@ -62,6 +80,31 @@ func GetBookDetails(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
+
+	// 貸出可否・貸出中情報を取得
+	var availableCopies int
+	var borrowedBy, borrowedAt, dueDate sql.NullString
+	err = config.DB.QueryRow(`
+        SELECT 
+            COUNT(*) FILTER (WHERE is_available = true) AS available_copies
+        FROM book_copies
+        WHERE book_id = $1
+    `, bookID).Scan(&availableCopies)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching availability"})
+		return
+	}
+
+	// もし貸出中のコピーがあれば、その情報も取得（最初の1件だけ例示）
+	err = config.DB.QueryRow(`
+        SELECT br.user_id::text, br.borrowed_at::text, br.due_date::text
+        FROM borrow_records br
+        JOIN book_copies bc ON br.book_copy_id = bc.id
+        WHERE bc.book_id = $1 AND br.status = 'borrowed'
+        ORDER BY br.borrowed_at DESC
+        LIMIT 1
+    `, bookID).Scan(&borrowedBy, &borrowedAt, &dueDate)
+	// エラーは無視（貸出中がない場合もある）
 
 	// 貸出履歴の取得
 	rows, err := config.DB.Query(`
@@ -92,6 +135,30 @@ func GetBookDetails(c *gin.Context) {
 			return
 		}
 		borrowHistory = append(borrowHistory, record)
+	}
+
+	// レスポンスを組み立て
+	bookMap := map[string]interface{}{
+		"id":           book.ID,
+		"title":        book.Title,
+		"author":       book.Author,
+		"isbn":         book.ISBN,
+		"jan":          book.JAN,
+		"ean13":        book.EAN13,
+		"type":         book.Type,
+		"total_copies": book.TotalCopies,
+		"created_at":   book.CreatedAt,
+		"updated_at":   book.UpdatedAt,
+		"available":    availableCopies > 0,
+	}
+	if borrowedBy.Valid {
+		bookMap["borrowedBy"] = borrowedBy.String
+	}
+	if borrowedAt.Valid {
+		bookMap["borrowedAt"] = borrowedAt.String
+	}
+	if dueDate.Valid {
+		bookMap["dueDate"] = dueDate.String
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -164,7 +231,7 @@ func BorrowBook(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Book borrowed successfully",
+		"message":  "Book borrowed successfully",
 		"due_date": dueDate,
 	})
 }
@@ -230,7 +297,7 @@ func ReturnBook(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Book returned successfully",
+		"message":     "Book returned successfully",
 		"returned_at": returnedAt,
 	})
 }
@@ -289,4 +356,4 @@ func GetBorrowHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, history)
-} 
+}
