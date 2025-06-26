@@ -10,11 +10,13 @@ type Book struct {
 	ID          uuid.UUID `json:"id"`
 	Title       string    `json:"title"`
 	Author      string    `json:"author"`
-	ISBN        *string   `json:"isbn,omitempty"`
-	JAN         *string   `json:"jan,omitempty"`
-	EAN13       *string   `json:"ean13,omitempty"`
+	ISBN        string    `json:"isbn"`
+	JAN         string    `json:"jan"`
+	EAN13       string    `json:"ean13"`
 	Type        string    `json:"type"`
 	TotalCopies int       `json:"total_copies"`
+	Barcode     string    `json:"barcode"`  // ← 追加
+	Location    string    `json:"location"` // ← 追加
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

@@ -34,12 +34,12 @@ func CreateBook(c *gin.Context) {
 	book.UpdatedAt = time.Now()
 
 	_, err = tx.Exec(`
-		INSERT INTO books (id, title, author, isbn, jan, ean13, type, total_copies, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`,
+    INSERT INTO books (id, title, author, isbn, jan, ean13, type, total_copies, barcode, location, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`,
 		book.ID, book.Title, book.Author, book.ISBN,
 		book.JAN, book.EAN13, book.Type, book.TotalCopies,
-		book.CreatedAt, book.UpdatedAt,
+		book.Barcode, book.Location, book.CreatedAt, book.UpdatedAt,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating book"})
@@ -51,10 +51,10 @@ func CreateBook(c *gin.Context) {
 		copyID := uuid.New()
 		serialNumber := book.ID.String()[:8] + "-" + uuid.New().String()[:4]
 		_, err = tx.Exec(`
-			INSERT INTO book_copies (id, book_id, serial_number, is_available, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`,
-			copyID, book.ID, serialNumber, true,
+        INSERT INTO book_copies (id, book_id, serial_number, barcode, is_available, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `,
+			copyID, book.ID, serialNumber, book.Barcode, true,
 			time.Now(), time.Now(),
 		)
 		if err != nil {

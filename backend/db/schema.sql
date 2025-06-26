@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS books (
     ean13 VARCHAR(13),
     type VARCHAR(10) NOT NULL CHECK (type IN ('book', 'thesis')),
     total_copies INTEGER NOT NULL,
+    barcode TEXT,         -- 追加
+    location TEXT,        -- 追加
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
@@ -28,6 +30,7 @@ CREATE TABLE IF NOT EXISTS book_copies (
     id UUID PRIMARY KEY,
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     serial_number VARCHAR(20) NOT NULL,
+    barcode TEXT,
     is_available BOOLEAN NOT NULL DEFAULT true,
     location TEXT,
     created_at TIMESTAMP NOT NULL,

@@ -16,7 +16,8 @@ func GetBooks(c *gin.Context) {
 	query := c.Query("query")
 	rows, err := config.DB.Query(`
         SELECT
-            b.id, b.title, b.author, b.isbn, b.jan, b.ean13, b.type, b.total_copies, b.created_at, b.updated_at,
+            b.id, b.title, b.author, b.isbn, b.jan, b.ean13, b.type, b.total_copies,
+            b.barcode, b.location, b.created_at, b.updated_at,
             COUNT(bc.id) FILTER (WHERE bc.is_available = true) AS available_copies
         FROM books b
         LEFT JOIN book_copies bc ON bc.book_id = b.id
@@ -33,11 +34,12 @@ func GetBooks(c *gin.Context) {
 	var books []map[string]interface{}
 	for rows.Next() {
 		var book models.Book
+		var barcode, location sql.NullString
 		var availableCopies int
 		err := rows.Scan(
 			&book.ID, &book.Title, &book.Author, &book.ISBN,
 			&book.JAN, &book.EAN13, &book.Type, &book.TotalCopies,
-			&book.CreatedAt, &book.UpdatedAt, &availableCopies,
+			&barcode, &location, &book.CreatedAt, &book.UpdatedAt, &availableCopies,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning books"})
@@ -52,9 +54,11 @@ func GetBooks(c *gin.Context) {
 			"ean13":        book.EAN13,
 			"type":         book.Type,
 			"total_copies": book.TotalCopies,
+			"barcode":      barcode.String,
+			"location":     location.String,
 			"created_at":   book.CreatedAt,
 			"updated_at":   book.UpdatedAt,
-			"available":    availableCopies > 0, // ← ここで貸出可否を返す
+			"available":    availableCopies > 0,
 		})
 	}
 
@@ -64,14 +68,15 @@ func GetBooks(c *gin.Context) {
 func GetBookDetails(c *gin.Context) {
 	bookID := c.Param("id")
 	var book models.Book
+	var barcode, location sql.NullString
 	err := config.DB.QueryRow(`
-        SELECT id, title, author, isbn, jan, ean13, type, total_copies, created_at, updated_at
+        SELECT id, title, author, isbn, jan, ean13, type, total_copies, barcode, location, created_at, updated_at
         FROM books
         WHERE id = $1
     `, bookID).Scan(
 		&book.ID, &book.Title, &book.Author, &book.ISBN,
 		&book.JAN, &book.EAN13, &book.Type, &book.TotalCopies,
-		&book.CreatedAt, &book.UpdatedAt,
+		&barcode, &location, &book.CreatedAt, &book.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Book not found"})
@@ -85,7 +90,7 @@ func GetBookDetails(c *gin.Context) {
 	var availableCopies int
 	var borrowedBy, borrowedAt, dueDate sql.NullString
 	err = config.DB.QueryRow(`
-        SELECT 
+        SELECT
             COUNT(*) FILTER (WHERE is_available = true) AS available_copies
         FROM book_copies
         WHERE book_id = $1
@@ -104,7 +109,7 @@ func GetBookDetails(c *gin.Context) {
         ORDER BY br.borrowed_at DESC
         LIMIT 1
     `, bookID).Scan(&borrowedBy, &borrowedAt, &dueDate)
-	// エラーは無視（貸出中がない場合もある）
+	// エラーは無視（貸出中がない場合もある））
 
 	// 貸出履歴の取得
 	rows, err := config.DB.Query(`
@@ -147,6 +152,8 @@ func GetBookDetails(c *gin.Context) {
 		"ean13":        book.EAN13,
 		"type":         book.Type,
 		"total_copies": book.TotalCopies,
+		"barcode":      barcode.String,
+		"location":     location.String,
 		"created_at":   book.CreatedAt,
 		"updated_at":   book.UpdatedAt,
 		"available":    availableCopies > 0,
@@ -162,39 +169,41 @@ func GetBookDetails(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"book":           book,
-		"borrow_history": borrowHistory,
+		"book":           bookMap,
+		"borrow_history": borrowHistory, // 既存の履歴
 	})
 }
 
 func BorrowBook(c *gin.Context) {
 	userID, _ := c.Get("user_id")
-	bookCopyID := c.PostForm("book_copy_id")
 
-	// 書籍コピーの存在確認と貸出可能確認
-	var isAvailable bool
-	err := config.DB.QueryRow(`
-		SELECT is_available
-		FROM book_copies
-		WHERE id = $1
-	`, bookCopyID).Scan(&isAvailable)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Book copy not found"})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+	// JSONからバーコードを受け取る
+	var req struct {
+		Barcode string `json:"barcode"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "バーコードが正しく送信されていません"})
 		return
 	}
+	barcode := req.Barcode
 
-	if !isAvailable {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Book is not available"})
+	// バーコードからbook_copy_idを取得
+	var bookCopyID string
+	err := config.DB.QueryRow(`
+        SELECT id FROM book_copies WHERE barcode = $1 AND is_available = true LIMIT 1
+    `, barcode).Scan(&bookCopyID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "貸出可能な書籍コピーが見つかりません"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "DBエラー"})
 		return
 	}
 
 	// トランザクション開始
 	tx, err := config.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not start transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "トランザクション開始失敗"})
 		return
 	}
 	defer tx.Rollback()
@@ -205,64 +214,69 @@ func BorrowBook(c *gin.Context) {
 	dueDate := borrowedAt.Add(14 * 24 * time.Hour) // 2週間後
 
 	_, err = tx.Exec(`
-		INSERT INTO borrow_records (id, user_id, book_copy_id, borrowed_at, due_date, status)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, borrowID, userID, bookCopyID, borrowedAt, dueDate, "borrowed")
+        INSERT INTO borrow_records (id, user_id, book_copy_id, borrowed_at, due_date, status)
+        VALUES ($1, $2, $3, $4, $5, $6)
+    `, borrowID, userID, bookCopyID, borrowedAt, dueDate, "borrowed")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating borrow record"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "貸出記録作成エラー"})
 		return
 	}
 
 	// 書籍コピーの状態を更新
 	_, err = tx.Exec(`
-		UPDATE book_copies
-		SET is_available = false
-		WHERE id = $1
-	`, bookCopyID)
+        UPDATE book_copies SET is_available = false WHERE id = $1
+    `, bookCopyID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating book copy status"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍コピー状態更新エラー"})
 		return
 	}
 
-	// トランザクションのコミット
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error committing transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "コミットエラー"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":  "Book borrowed successfully",
+		"message":  "貸出成功",
 		"due_date": dueDate,
 	})
 }
 
 func ReturnBook(c *gin.Context) {
 	userID, _ := c.Get("user_id")
-	bookCopyID := c.PostForm("book_copy_id")
+	barcode := c.PostForm("barcode")
 
-	// 貸出記録の存在確認
-	var borrowRecord models.BorrowRecord
+	// バーコードからbook_copy_idを取得
+	var bookCopyID string
 	err := config.DB.QueryRow(`
-		SELECT id, user_id, book_copy_id, borrowed_at, due_date, returned_at, status
-		FROM borrow_records
-		WHERE book_copy_id = $1 AND user_id = $2 AND status = 'borrowed'
-	`, bookCopyID, userID).Scan(
-		&borrowRecord.ID, &borrowRecord.UserID, &borrowRecord.BookCopyID,
-		&borrowRecord.BorrowedAt, &borrowRecord.DueDate, &borrowRecord.ReturnedAt,
-		&borrowRecord.Status,
-	)
+        SELECT id FROM book_copies WHERE barcode = $1 LIMIT 1
+    `, barcode).Scan(&bookCopyID)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Borrow record not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "書籍コピーが見つかりません"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "DBエラー"})
+		return
+	}
+
+	// 貸出記録の存在確認
+	var borrowRecordID string
+	err = config.DB.QueryRow(`
+        SELECT id FROM borrow_records
+        WHERE book_copy_id = $1 AND user_id = $2 AND status = 'borrowed'
+    `, bookCopyID, userID).Scan(&borrowRecordID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "貸出記録が見つかりません"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "DBエラー"})
 		return
 	}
 
 	// トランザクション開始
 	tx, err := config.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not start transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "トランザクション開始失敗"})
 		return
 	}
 	defer tx.Rollback()
@@ -270,34 +284,31 @@ func ReturnBook(c *gin.Context) {
 	// 返却日時の更新
 	returnedAt := time.Now()
 	_, err = tx.Exec(`
-		UPDATE borrow_records
-		SET returned_at = $1, status = 'returned'
-		WHERE id = $2
-	`, returnedAt, borrowRecord.ID)
+        UPDATE borrow_records
+        SET returned_at = $1, status = 'returned'
+        WHERE id = $2
+    `, returnedAt, borrowRecordID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating borrow record"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "返却記録更新エラー"})
 		return
 	}
 
 	// 書籍コピーの状態を更新
 	_, err = tx.Exec(`
-		UPDATE book_copies
-		SET is_available = true
-		WHERE id = $1
-	`, bookCopyID)
+        UPDATE book_copies SET is_available = true WHERE id = $1
+    `, bookCopyID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating book copy status"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍コピー状態更新エラー"})
 		return
 	}
 
-	// トランザクションのコミット
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error committing transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "コミットエラー"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":     "Book returned successfully",
+		"message":     "返却成功",
 		"returned_at": returnedAt,
 	})
 }

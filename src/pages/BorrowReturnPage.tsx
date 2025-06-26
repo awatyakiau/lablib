@@ -4,6 +4,7 @@ import { borrowItem, returnItem } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { Book, BookMarked } from 'lucide-react';
 import { formatDate } from '../utils/dates';
+import axios from 'axios';
 
 const BorrowReturnPage: React.FC = () => {
   const { user } = useAuth();
@@ -11,41 +12,41 @@ const BorrowReturnPage: React.FC = () => {
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [dueDate, setDueDate] = useState<string | null>(null);
   
-  const handleBorrow = (barcode: string) => {
+  const handleBorrow = async (barcode: string) => {
     if (!user) return;
-    
     try {
-      const record = borrowItem(barcode, user.id, user.name);
+      const response = await axios.post('/api/books/borrow', { barcode });
       setResult({
         success: true,
-        message: `「${record.itemTitle}」を貸し出しました`
+        message: response.data.message
       });
-      setDueDate(record.dueDate);
-    } catch (error) {
+      setDueDate(response.data.due_date);
+    } catch (error: any) {
       setResult({
         success: false,
-        message: (error as Error).message
+        message: error.response?.data?.error || '貸出に失敗しました'
       });
       setDueDate(null);
     }
   };
-  
-  const handleReturn = (barcode: string) => {
+
+  const handleReturn = async (barcode: string) => {
+    if (!user) return;
     try {
-      const record = returnItem(barcode);
+      const response = await axios.post('/api/books/return', { barcode });
       setResult({
         success: true,
-        message: `「${record.itemTitle}」を返却しました`
+        message: response.data.message
       });
       setDueDate(null);
-    } catch (error) {
+    } catch (error: any) {
       setResult({
         success: false,
-        message: (error as Error).message
+        message: error.response?.data?.error || '返却に失敗しました'
       });
     }
   };
-  
+
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
