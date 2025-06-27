@@ -21,6 +21,7 @@ const HistoryPage: React.FC = () => {
         });
         setBorrowings(response.data);
       } catch (err: any) {
+        setBorrowings([]);
         setError('貸出履歴の取得に失敗しました');
       } finally {
         setLoading(false);
@@ -39,7 +40,7 @@ const HistoryPage: React.FC = () => {
       ) : error ? (
         <div className="text-red-500">{error}</div>
       ) : (
-        <BorrowingHistory borrowings={borrowings} showUser={user?.role === 'admin'} />
+        <BorrowingHistory borrowings={borrowings || []} showUser={user?.role === 'admin'} />
       )}
     </div>
   );

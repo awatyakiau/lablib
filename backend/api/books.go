@@ -113,33 +113,51 @@ func GetBookDetails(c *gin.Context) {
 
 	// 貸出履歴の取得
 	rows, err := config.DB.Query(`
-		SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
-			   u.name as user_name, bc.serial_number
-		FROM borrow_records br
-		JOIN users u ON br.user_id = u.id
-		JOIN book_copies bc ON br.book_copy_id = bc.id
-		WHERE bc.book_id = $1
-		ORDER BY br.borrowed_at DESC
-	`, bookID)
+        SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
+               u.name as user_name, bc.serial_number
+        FROM borrow_records br
+        JOIN users u ON br.user_id = u.id
+        JOIN book_copies bc ON br.book_copy_id = bc.id
+        WHERE bc.book_id = $1
+        ORDER BY br.borrowed_at DESC
+    `, bookID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching borrow history"})
 		return
 	}
 	defer rows.Close()
 
-	var borrowHistory []models.BorrowRecord
+	var borrowHistory []map[string]interface{}
 	for rows.Next() {
-		var record models.BorrowRecord
+		var (
+			idStr, userIDStr, bookCopyIDStr string
+			borrowedAt, dueDate             time.Time
+			returnedAt                      sql.NullTime
+			status, userName, serialNumber  string
+		)
 		err := rows.Scan(
-			&record.ID, &record.UserID, &record.BookCopyID,
-			&record.BorrowedAt, &record.DueDate, &record.ReturnedAt,
-			&record.Status, &record.User.Name, &record.BookCopy.SerialNumber,
+			&idStr, &userIDStr, &bookCopyIDStr,
+			&borrowedAt, &dueDate, &returnedAt, &status,
+			&userName, &serialNumber,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning borrow history"})
 			return
 		}
-		borrowHistory = append(borrowHistory, record)
+		borrowHistory = append(borrowHistory, map[string]interface{}{
+			"id":         idStr,
+			"userId":     userIDStr,
+			"userName":   userName,
+			"borrowedAt": borrowedAt,
+			"dueDate":    dueDate,
+			"returnedAt": func() *time.Time {
+				if returnedAt.Valid {
+					return &returnedAt.Time
+				}
+				return nil
+			}(),
+			"status": status,
+		})
 	}
 
 	// レスポンスを組み立て
@@ -168,9 +186,10 @@ func GetBookDetails(c *gin.Context) {
 		bookMap["dueDate"] = dueDate.String
 	}
 
+	// ...書籍情報の組み立て...
 	c.JSON(http.StatusOK, gin.H{
 		"book":           bookMap,
-		"borrow_history": borrowHistory, // 既存の履歴
+		"borrow_history": borrowHistory,
 	})
 }
 
@@ -370,21 +389,14 @@ func GetBorrowHistory(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	// ...existing code...
-	var history []models.BorrowRecord
+	var history []map[string]interface{}
 	for rows.Next() {
 		var (
-			idStr         string
-			userIDStr     string
-			bookCopyIDStr string
-			borrowedAt    time.Time
-			dueDate       time.Time
-			returnedAt    sql.NullTime
-			status        string
-			title         string
-			author        string
-			serialNumber  string
-			userName      string
+			idStr, userIDStr, bookCopyIDStr string
+			borrowedAt, dueDate             time.Time
+			returnedAt                      sql.NullTime
+			status, title, author           string
+			serialNumber, userName          string
 		)
 		err := rows.Scan(
 			&idStr, &userIDStr, &bookCopyIDStr,
@@ -395,34 +407,22 @@ func GetBorrowHistory(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning borrow history"})
 			return
 		}
-		id, _ := uuid.Parse(idStr)
-		userID, _ := uuid.Parse(userIDStr)
-		bookCopyID, _ := uuid.Parse(bookCopyIDStr)
-		history = append(history, models.BorrowRecord{
-			ID:         id,
-			UserID:     userID,
-			BookCopyID: bookCopyID,
-			BorrowedAt: borrowedAt,
-			DueDate:    dueDate,
-			ReturnedAt: func() *time.Time {
+		history = append(history, map[string]interface{}{
+			"id":         idStr,
+			"userId":     userIDStr,
+			"itemId":     bookCopyIDStr,
+			"itemTitle":  title,
+			"userName":   userName,
+			"borrowedAt": borrowedAt,
+			"dueDate":    dueDate,
+			"returnedAt": func() *time.Time {
 				if returnedAt.Valid {
 					return &returnedAt.Time
 				}
 				return nil
 			}(),
-			Status: status,
-			Book: models.Book{
-				Title:  title,
-				Author: author,
-			},
-			BookCopy: models.BookCopy{
-				SerialNumber: serialNumber,
-			},
-			User: models.User{
-				Name: userName,
-			},
+			"status": status,
 		})
 	}
-
 	c.JSON(http.StatusOK, history)
 }
