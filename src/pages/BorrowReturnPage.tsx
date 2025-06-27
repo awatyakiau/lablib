@@ -15,7 +15,7 @@ const BorrowReturnPage: React.FC = () => {
   const handleBorrow = async (barcode: string) => {
     if (!user) return;
     try {
-      const response = await axios.post('/api/books/borrow', { barcode });
+      const response = await axios.post('/api/books/borrow', { barcode, user_id: user.id,});
       setResult({
         success: true,
         message: response.data.message
@@ -33,7 +33,7 @@ const BorrowReturnPage: React.FC = () => {
   const handleReturn = async (barcode: string) => {
     if (!user) return;
     try {
-      const response = await axios.post('/api/books/return', { barcode });
+      const response = await axios.post('/api/books/return', { barcode, user_id: user.id,});
       setResult({
         success: true,
         message: response.data.message

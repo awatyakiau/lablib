@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS books (
     ean13 VARCHAR(13),
     type VARCHAR(10) NOT NULL CHECK (type IN ('book', 'thesis')),
     total_copies INTEGER NOT NULL,
-    barcode TEXT,         -- 追加
-    location TEXT,        -- 追加
+    barcode TEXT,
+    location TEXT,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );

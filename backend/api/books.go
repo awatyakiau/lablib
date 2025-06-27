@@ -175,17 +175,22 @@ func GetBookDetails(c *gin.Context) {
 }
 
 func BorrowBook(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-
-	// JSONからバーコードを受け取る
+	// JSONからバーコードとユーザーIDを受け取る
 	var req struct {
 		Barcode string `json:"barcode"`
+		UserID  string `json:"user_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "バーコードが正しく送信されていません"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "リクエストデータが正しくありません"})
 		return
 	}
 	barcode := req.Barcode
+	userID := req.UserID
+
+	if barcode == "" || userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "バーコードとユーザーIDは必須です"})
+		return
+	}
 
 	// バーコードからbook_copy_idを取得
 	var bookCopyID string
@@ -243,8 +248,22 @@ func BorrowBook(c *gin.Context) {
 }
 
 func ReturnBook(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-	barcode := c.PostForm("barcode")
+	// JSONからバーコードとユーザーIDを受け取る
+	var req struct {
+		Barcode string `json:"barcode"`
+		UserID  string `json:"user_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "リクエストデータが正しくありません"})
+		return
+	}
+	barcode := req.Barcode
+	userID := req.UserID
+
+	if barcode == "" || userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "バーコードとユーザーIDは必須です"})
+		return
+	}
 
 	// バーコードからbook_copy_idを取得
 	var bookCopyID string
@@ -322,24 +341,25 @@ func GetBorrowHistory(c *gin.Context) {
 
 	if role == "admin" {
 		query = `
-			SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
-				   b.title, b.author, bc.serial_number, u.name as user_name
-			FROM borrow_records br
-			JOIN book_copies bc ON br.book_copy_id = bc.id
-			JOIN books b ON bc.book_id = b.id
-			JOIN users u ON br.user_id = u.id
-			ORDER BY br.borrowed_at DESC
-		`
+        SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
+               b.title, b.author, bc.serial_number, u.name as user_name
+        FROM borrow_records br
+        JOIN book_copies bc ON br.book_copy_id = bc.id
+        JOIN books b ON bc.book_id = b.id
+        JOIN users u ON br.user_id = u.id
+        ORDER BY br.borrowed_at DESC
+    `
 	} else {
 		query = `
-			SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
-				   b.title, b.author, bc.serial_number
-			FROM borrow_records br
-			JOIN book_copies bc ON br.book_copy_id = bc.id
-			JOIN books b ON bc.book_id = b.id
-			WHERE br.user_id = $1
-			ORDER BY br.borrowed_at DESC
-		`
+        SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
+               b.title, b.author, bc.serial_number, u.name as user_name
+        FROM borrow_records br
+        JOIN book_copies bc ON br.book_copy_id = bc.id
+        JOIN books b ON bc.book_id = b.id
+        JOIN users u ON br.user_id = u.id
+        WHERE br.user_id = $1
+        ORDER BY br.borrowed_at DESC
+    `
 		args = append(args, userID)
 	}
 
@@ -350,20 +370,58 @@ func GetBorrowHistory(c *gin.Context) {
 	}
 	defer rows.Close()
 
+	// ...existing code...
 	var history []models.BorrowRecord
 	for rows.Next() {
-		var record models.BorrowRecord
+		var (
+			idStr         string
+			userIDStr     string
+			bookCopyIDStr string
+			borrowedAt    time.Time
+			dueDate       time.Time
+			returnedAt    sql.NullTime
+			status        string
+			title         string
+			author        string
+			serialNumber  string
+			userName      string
+		)
 		err := rows.Scan(
-			&record.ID, &record.UserID, &record.BookCopyID,
-			&record.BorrowedAt, &record.DueDate, &record.ReturnedAt,
-			&record.Status, &record.Book.Title, &record.Book.Author,
-			&record.BookCopy.SerialNumber, &record.User.Name,
+			&idStr, &userIDStr, &bookCopyIDStr,
+			&borrowedAt, &dueDate, &returnedAt, &status,
+			&title, &author, &serialNumber, &userName,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning borrow history"})
 			return
 		}
-		history = append(history, record)
+		id, _ := uuid.Parse(idStr)
+		userID, _ := uuid.Parse(userIDStr)
+		bookCopyID, _ := uuid.Parse(bookCopyIDStr)
+		history = append(history, models.BorrowRecord{
+			ID:         id,
+			UserID:     userID,
+			BookCopyID: bookCopyID,
+			BorrowedAt: borrowedAt,
+			DueDate:    dueDate,
+			ReturnedAt: func() *time.Time {
+				if returnedAt.Valid {
+					return &returnedAt.Time
+				}
+				return nil
+			}(),
+			Status: status,
+			Book: models.Book{
+				Title:  title,
+				Author: author,
+			},
+			BookCopy: models.BookCopy{
+				SerialNumber: serialNumber,
+			},
+			User: models.User{
+				Name: userName,
+			},
+		})
 	}
 
 	c.JSON(http.StatusOK, history)
