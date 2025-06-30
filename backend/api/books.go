@@ -352,14 +352,8 @@ func ReturnBook(c *gin.Context) {
 }
 
 func GetBorrowHistory(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-	role, _ := c.Get("role")
-
-	var query string
-	var args []interface{}
-
-	if role == "admin" {
-		query = `
+	// 認証ミドルウェアが無効なため、常に全履歴を返す
+	query := `
         SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
                b.title, b.author, bc.serial_number, u.name as user_name
         FROM borrow_records br
@@ -368,21 +362,7 @@ func GetBorrowHistory(c *gin.Context) {
         JOIN users u ON br.user_id = u.id
         ORDER BY br.borrowed_at DESC
     `
-	} else {
-		query = `
-        SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
-               b.title, b.author, bc.serial_number, u.name as user_name
-        FROM borrow_records br
-        JOIN book_copies bc ON br.book_copy_id = bc.id
-        JOIN books b ON bc.book_id = b.id
-        JOIN users u ON br.user_id = u.id
-        WHERE br.user_id = $1
-        ORDER BY br.borrowed_at DESC
-    `
-		args = append(args, userID)
-	}
-
-	rows, err := config.DB.Query(query, args...)
+	rows, err := config.DB.Query(query)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching borrow history"})
 		return
