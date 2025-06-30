@@ -125,11 +125,6 @@ const LoginForm: React.FC = () => {
           {isLoading ? "ログイン中..." : "ログイン"}
         </button>
       </form>
-
-      <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>一般ユーザー: 00061204 / Dependable61204</p>
-        <p className="mt-1">管理者ユーザー: 00999999 / Dependable61204</p>
-      </div>
     </div>
   );
 };
