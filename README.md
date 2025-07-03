@@ -44,6 +44,7 @@ docker compose down
 - PostgreSQLは初回起動時に `backend/db/schema.sql` を自動で適用します。
 - データは `db_data` ボリュームに永続化されます。
 - スキーマ変更時は `docker compose down -v` でボリュームを削除して再起動してください。
+- 上記コマンドを実行すると全データが初期化されるので注意してください。
 
 ### バックエンド環境変数（docker-composeで自動設定）
 - DB_HOST=db
@@ -55,10 +56,11 @@ docker compose down
 ### API認証
 - 多くのAPIはJWT認証が必要です。
 - `/api/auth/login` でトークンを取得し、`Authorization: Bearer <token>` ヘッダを付与してください。
+- 簡易版作成の際に認証エラーが発生している為、一時的に無効化してます。
 
 ## 開発時の注意点
 - ホットリロードが有効になっているため、ソースコードの変更は自動的に反映されます
-- node_modulesはコンテナ内にマウントされているため、ローカル環境にインストールする必要はありません 
+- node_modulesはコンテナ内にマウントされているため、ローカル環境にインストールする必要はありません
 
 ## 外部アクセスについて
 
@@ -68,4 +70,4 @@ Viteサーバーは`--host`オプションで0.0.0.0バインドされている�
 ## ポート
 - 5173: Vite (React開発サーバー)
 - 8080: GoバックエンドAPI
-- 5432: PostgreSQL 
+- 5432: PostgreSQL

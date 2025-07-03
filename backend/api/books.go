@@ -214,13 +214,23 @@ func BorrowBook(c *gin.Context) {
 	// バーコードからbook_copy_idを取得
 	var bookCopyID string
 	err := config.DB.QueryRow(`
-        SELECT id FROM book_copies WHERE barcode = $1 AND is_available = true LIMIT 1
-    `, barcode).Scan(&bookCopyID)
+    SELECT id FROM book_copies WHERE barcode = $1 AND is_available = true LIMIT 1
+`, barcode).Scan(&bookCopyID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "貸出可能な書籍コピーが見つかりません"})
 		return
 	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "DBエラー"})
+		return
+	}
+
+	// ここでbookCopyIDからbookIDを取得
+	var bookID string
+	err = config.DB.QueryRow(`
+    SELECT book_id FROM book_copies WHERE id = $1
+`, bookCopyID).Scan(&bookID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍ID取得エラー"})
 		return
 	}
 
@@ -258,6 +268,39 @@ func BorrowBook(c *gin.Context) {
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "コミットエラー"})
 		return
+	}
+
+	// 月次ランキングの更新
+	// ...トランザクション開始後...
+	month := time.Now().Format("2006-01")
+	var count int
+	err = tx.QueryRow(`
+    SELECT COUNT(*) FROM monthly_rankings WHERE month = $1 AND book_id = $2
+`, month, bookID).Scan(&count)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ランキング取得エラー"})
+		return
+	}
+	if count == 0 {
+		// 新規作成
+		_, err = tx.Exec(`
+        INSERT INTO monthly_rankings (id, month, book_id, borrow_count)
+        VALUES ($1, $2, $3, 1)
+    `, uuid.New(), month, bookID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ランキング作成エラー"})
+			return
+		}
+	} else {
+		// カウントをインクリメント
+		_, err = tx.Exec(`
+        UPDATE monthly_rankings SET borrow_count = borrow_count + 1
+        WHERE month = $1 AND book_id = $2
+    `, month, bookID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "ランキング更新エラー"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

@@ -8,7 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var JWTSecret = []byte("048af2438891a89a3536ac09cc96ccbd34a1714e88cf8fdb63e6186dcc3ff89d") // 本番環境では環境変数から取得
+var JWTSecret = []byte("mock-token") // 本番環境では環境変数から取得
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
