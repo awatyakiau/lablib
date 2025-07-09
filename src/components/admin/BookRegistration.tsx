@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BookPlus, Save, Trash, Search, Loader2 } from 'lucide-react';
 import BarcodeScanner from '../books/BarcodeScanner';
 import { BookPlus, Save, Trash } from 'lucide-react';
 import axios from 'axios';
@@ -26,7 +27,8 @@ const BookRegistration: React.FC = () => {
   
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+  const [isSearching, setIsSearching] = useState(false);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
@@ -134,6 +136,38 @@ const handleSubmit = async (e: React.FormEvent) => {
     setError(null);
     setSuccess(null);
   };
+
+    const handleAutoSearch = async () => {
+    if (!formData.isbn && !formData.barcode) {
+      setError('ISBNまたはバーコードを入力してください');
+      return;
+    }
+
+    setIsSearching(true);
+    setError(null);
+
+    try {
+      const isbn = formData.isbn || formData.barcode;
+      const response = await axios.get(`/api/books/fetch-info?isbn=${isbn}`);
+      
+      setFormData(prev => ({
+        ...prev,
+        title: response.data.title || prev.title,
+        author: response.data.author || prev.author,
+      }));
+
+      setSuccess('書籍情報を自動取得しました');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setError('書籍情報が見つかりませんでした');
+      } else {
+        setError('書籍情報の取得に失敗しました');
+      }
+    } finally {
+      setIsSearching(false);
+    }
+  };
   
   return (
     <div>
@@ -223,21 +257,36 @@ const handleSubmit = async (e: React.FormEvent) => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {formData.type === 'book' && (
-            <div>
-              <label htmlFor="isbn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                ISBN
-              </label>
+          <div>
+            <label htmlFor="isbn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              ISBN
+            </label>
+            <div className="flex gap-2">
               <input
                 id="isbn"
                 name="isbn"
                 type="text"
                 value={formData.isbn}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                 placeholder="ISBN"
               />
+              <button
+                type="button"
+                onClick={handleAutoSearch}
+                disabled={isSearching || (!formData.isbn && !formData.barcode)}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                {isSearching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                <span className="ml-2">自動検索</span>
+              </button>
             </div>
-          )}
+          </div>
+        )}
           
           <div>
             <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

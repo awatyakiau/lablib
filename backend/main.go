@@ -43,6 +43,7 @@ func main() {
 	{
 		// 図書管理
 		auth.GET("/books", api.GetBooks)
+		auth.GET("/books/fetch-info", api.FetchBookInfo)
 		auth.GET("/books/:id", api.GetBookDetails)
 		auth.POST("/books/borrow", api.BorrowBook)
 		auth.POST("/books/return", api.ReturnBook)
@@ -53,6 +54,7 @@ func main() {
 		//admin.Use(middleware.AdminMiddleware())
 		{
 			admin.POST("/books", api.CreateBook)
+			admin.PUT("/books/:id", api.UpdateBook)
 			admin.DELETE("/books", api.DeleteBook)
 			admin.POST("/users", api.CreateUser)
 			admin.DELETE("/users/:id", api.DeleteUser)

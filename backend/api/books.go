@@ -2,7 +2,10 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"lablib/config"
@@ -448,4 +451,90 @@ func GetBorrowHistory(c *gin.Context) {
 		})
 	}
 	c.JSON(http.StatusOK, history)
+}
+
+// 書籍情報自動取得
+func FetchBookInfo(c *gin.Context) {
+	isbn := c.Query("isbn")
+	if isbn == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ISBNが必要です"})
+		return
+	}
+
+	// Google Books APIから書籍情報を取得
+	url := fmt.Sprintf("https://www.googleapis.com/books/v1/volumes?q=isbn:%s", isbn)
+	resp, err := http.Get(url)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍情報の取得に失敗しました"})
+		return
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Items []struct {
+			VolumeInfo struct {
+				Title     string   `json:"title"`
+				Authors   []string `json:"authors"`
+				Publisher string   `json:"publisher"`
+			} `json:"volumeInfo"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "レスポンスの解析に失敗しました"})
+		return
+	}
+
+	if len(result.Items) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "書籍情報が見つかりません"})
+		return
+	}
+
+	book := result.Items[0].VolumeInfo
+	author := ""
+	if len(book.Authors) > 0 {
+		author = strings.Join(book.Authors, ", ")
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"title":     book.Title,
+		"author":    author,
+		"publisher": book.Publisher,
+	})
+}
+
+// 書籍情報更新
+func UpdateBook(c *gin.Context) {
+	bookID := c.Param("id")
+	var updateData struct {
+		Title    string `json:"title"`
+		Author   string `json:"author"`
+		ISBN     string `json:"isbn"`
+		Location string `json:"location"`
+	}
+
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無効なリクエストデータです"})
+		return
+	}
+
+	// バリデーション
+	if updateData.Title == "" || updateData.Author == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "タイトルと著者は必須です"})
+		return
+	}
+
+	// 書籍情報を更新
+	_, err := config.DB.Exec(`
+        UPDATE books 
+        SET title = $1, author = $2, isbn = $3, location = $4, updated_at = $5
+        WHERE id = $6
+    `, updateData.Title, updateData.Author, updateData.ISBN, updateData.Location, time.Now(), bookID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍情報の更新に失敗しました"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "書籍情報が更新されました"})
 }
