@@ -132,7 +132,7 @@ const BorrowingHistory: React.FC<BorrowingHistoryProps> = ({
                 
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <Link
-                    to={`/items/${borrowing.itemId}`}
+                     to={`/borrow-record/${borrowing.id}`}
                     className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 inline-flex items-center"
                   >
                     詳細

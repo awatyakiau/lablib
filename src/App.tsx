@@ -12,6 +12,7 @@ import BorrowReturnPage from './pages/BorrowReturnPage';
 import HistoryPage from './pages/HistoryPage';
 import RankingPage from './pages/RankingPage';
 import AdminPage from './pages/AdminPage';
+import BorrowingRecordDetails from './components/borrowing/BorrowingRecordDetails';
 
 // Layout
 import Layout from './components/layout/Layout';
@@ -59,6 +60,7 @@ function App() {
               <Route path="history" element={<HistoryPage />} />
               <Route path="ranking" element={<RankingPage />} />
               <Route path="admin/*" element={<AdminPage />} />
+              <Route path="/borrow-record/:id" element={<BorrowingRecordDetails />} />
             </Route>
           </Routes>
         </BrowserRouter>

@@ -255,31 +255,41 @@ func GetMonthlyRankings(c *gin.Context) {
 	}
 
 	rows, err := config.DB.Query(`
-		SELECT mr.id, mr.month, mr.book_id, mr.borrow_count,
-			   b.title, b.author, b.type
-		FROM monthly_rankings mr
-		JOIN books b ON mr.book_id = b.id
-		WHERE mr.month = $1
-		ORDER BY mr.borrow_count DESC
-		LIMIT 10
-	`, month)
+        SELECT mr.id, mr.month, mr.book_id, mr.borrow_count,
+               b.title, b.author, b.type
+        FROM monthly_rankings mr
+        JOIN books b ON mr.book_id = b.id
+        WHERE mr.month = $1
+        ORDER BY mr.borrow_count DESC
+        LIMIT 10
+    `, month)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching monthly rankings"})
 		return
 	}
 	defer rows.Close()
 
-	var rankings []models.MonthlyRanking
+	var rankings []map[string]interface{}
 	for rows.Next() {
-		var ranking models.MonthlyRanking
-		err := rows.Scan(
-			&ranking.ID, &ranking.Month, &ranking.BookID,
-			&ranking.BorrowCount, &ranking.Book.Title,
-			&ranking.Book.Author, &ranking.Book.Type,
+		var (
+			id, month, bookID       string
+			borrowCount             int
+			title, author, bookType string
 		)
+		err := rows.Scan(&id, &month, &bookID, &borrowCount, &title, &author, &bookType)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning monthly rankings"})
 			return
+		}
+
+		ranking := map[string]interface{}{
+			"id":           id,
+			"month":        month,
+			"book_id":      bookID,
+			"borrow_count": borrowCount,
+			"title":        title,
+			"author":       author,
+			"type":         bookType,
 		}
 		rankings = append(rankings, ranking)
 	}

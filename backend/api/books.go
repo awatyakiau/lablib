@@ -530,7 +530,6 @@ func FetchBookInfo(c *gin.Context) {
 }
 
 // 書籍情報更新
-// 書籍情報更新
 func UpdateBook(c *gin.Context) {
 	bookID := c.Param("id")
 	var updateData struct {
@@ -538,7 +537,7 @@ func UpdateBook(c *gin.Context) {
 		Author      string `json:"author"`
 		ISBN        string `json:"isbn"`
 		Location    string `json:"location"`
-		TotalCopies int    `json:"total_copies"` // ← 追加
+		TotalCopies int    `json:"total_copies"`
 	}
 
 	if err := c.ShouldBindJSON(&updateData); err != nil {
@@ -645,4 +644,58 @@ func UpdateBook(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "書籍情報が更新されました"})
+}
+
+// 貸出記録詳細取得
+func GetBorrowRecordDetails(c *gin.Context) {
+	recordID := c.Param("id")
+
+	var (
+		id, userID, bookCopyID, borrowedAt, dueDate, status     string
+		bookTitle, bookAuthor, bookType, serialNumber, userName string
+		returnedAt                                              sql.NullString
+		bookID                                                  string
+	)
+
+	err := config.DB.QueryRow(`
+        SELECT br.id, br.user_id, br.book_copy_id, br.borrowed_at, br.due_date, br.returned_at, br.status,
+               b.id as book_id, b.title, b.author, b.type, bc.serial_number, u.name as user_name
+        FROM borrow_records br
+        JOIN book_copies bc ON br.book_copy_id = bc.id
+        JOIN books b ON bc.book_id = b.id
+        JOIN users u ON br.user_id = u.id
+        WHERE br.id = $1
+    `, recordID).Scan(
+		&id, &userID, &bookCopyID, &borrowedAt, &dueDate, &returnedAt, &status,
+		&bookID, &bookTitle, &bookAuthor, &bookType, &serialNumber, &userName,
+	)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "貸出記録が見つかりません"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "データベースエラー"})
+		return
+	}
+
+	record := map[string]interface{}{
+		"id":            id,
+		"user_id":       userID,
+		"book_copy_id":  bookCopyID,
+		"borrowed_at":   borrowedAt,
+		"due_date":      dueDate,
+		"status":        status,
+		"book_id":       bookID,
+		"book_title":    bookTitle,
+		"book_author":   bookAuthor,
+		"book_type":     bookType,
+		"serial_number": serialNumber,
+		"user_name":     userName,
+	}
+
+	if returnedAt.Valid {
+		record["returned_at"] = returnedAt.String
+	}
+
+	c.JSON(http.StatusOK, record)
 }

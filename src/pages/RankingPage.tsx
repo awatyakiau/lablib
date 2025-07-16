@@ -41,7 +41,7 @@ const RankingPage: React.FC = () => {
         <div className="grid grid-cols-1 gap-6">
           {topItems.map((item, index) => (
             <Link
-              to={`/items/${item.book_id || item.id}`}
+              to={`/books/${item.book_id || item.id}`}
               key={item.book_id || item.id}
               className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
             >

@@ -45,6 +45,7 @@ func main() {
 		auth.GET("/books", api.GetBooks)
 		auth.GET("/books/fetch-info", api.FetchBookInfo)
 		auth.GET("/books/:id", api.GetBookDetails)
+		auth.GET("/books/borrow-record/:id", api.GetBorrowRecordDetails)
 		auth.POST("/books/borrow", api.BorrowBook)
 		auth.POST("/books/return", api.ReturnBook)
 		auth.GET("/books/history", api.GetBorrowHistory)
