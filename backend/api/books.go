@@ -214,11 +214,32 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
+	// UUIDの変換
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無効なユーザーIDです"})
+		return
+	}
+
+	// ← ユーザー存在チェックをトランザクション前に実行
+	var userExists bool
+	err = config.DB.QueryRow(`
+        SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)
+    `, userUUID).Scan(&userExists)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ユーザー確認エラー"})
+		return
+	}
+	if !userExists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "指定されたユーザーが見つかりません"})
+		return
+	}
+
 	// バーコードからbook_copy_idを取得
 	var bookCopyID string
-	err := config.DB.QueryRow(`
-    SELECT id FROM book_copies WHERE barcode = $1 AND is_available = true LIMIT 1
-`, barcode).Scan(&bookCopyID)
+	err = config.DB.QueryRow(`
+        SELECT id FROM book_copies WHERE barcode = $1 AND is_available = true LIMIT 1
+    `, barcode).Scan(&bookCopyID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "貸出可能な書籍コピーが見つかりません"})
 		return
@@ -227,11 +248,17 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
+	bookCopyUUID, err := uuid.Parse(bookCopyID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "無効な書籍コピーIDです"})
+		return
+	}
+
 	// ここでbookCopyIDからbookIDを取得
 	var bookID string
 	err = config.DB.QueryRow(`
-    SELECT book_id FROM book_copies WHERE id = $1
-`, bookCopyID).Scan(&bookID)
+        SELECT book_id FROM book_copies WHERE id = $1
+    `, bookCopyID).Scan(&bookID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍ID取得エラー"})
 		return
@@ -253,9 +280,9 @@ func BorrowBook(c *gin.Context) {
 	_, err = tx.Exec(`
         INSERT INTO borrow_records (id, user_id, book_copy_id, borrowed_at, due_date, status)
         VALUES ($1, $2, $3, $4, $5, $6)
-    `, borrowID, userID, bookCopyID, borrowedAt, dueDate, "borrowed")
+    `, borrowID, userUUID, bookCopyUUID, borrowedAt, dueDate, "borrowed")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "貸出記録作成エラー"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "貸出記録作成エラー: " + err.Error()})
 		return
 	}
 
@@ -268,18 +295,12 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "コミットエラー"})
-		return
-	}
-
 	// 月次ランキングの更新
-	// ...トランザクション開始後...
 	month := time.Now().Format("2006-01")
 	var count int
 	err = tx.QueryRow(`
-    SELECT COUNT(*) FROM monthly_rankings WHERE month = $1 AND book_id = $2
-`, month, bookID).Scan(&count)
+        SELECT COUNT(*) FROM monthly_rankings WHERE month = $1 AND book_id = $2
+    `, month, bookID).Scan(&count)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ランキング取得エラー"})
 		return
@@ -287,9 +308,9 @@ func BorrowBook(c *gin.Context) {
 	if count == 0 {
 		// 新規作成
 		_, err = tx.Exec(`
-        INSERT INTO monthly_rankings (id, month, book_id, borrow_count)
-        VALUES ($1, $2, $3, 1)
-    `, uuid.New(), month, bookID)
+            INSERT INTO monthly_rankings (id, month, book_id, borrow_count)
+            VALUES ($1, $2, $3, 1)
+        `, uuid.New(), month, bookID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "ランキング作成エラー"})
 			return
@@ -297,13 +318,18 @@ func BorrowBook(c *gin.Context) {
 	} else {
 		// カウントをインクリメント
 		_, err = tx.Exec(`
-        UPDATE monthly_rankings SET borrow_count = borrow_count + 1
-        WHERE month = $1 AND book_id = $2
-    `, month, bookID)
+            UPDATE monthly_rankings SET borrow_count = borrow_count + 1
+            WHERE month = $1 AND book_id = $2
+        `, month, bookID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "ランキング更新エラー"})
 			return
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "コミットエラー"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -504,13 +530,15 @@ func FetchBookInfo(c *gin.Context) {
 }
 
 // 書籍情報更新
+// 書籍情報更新
 func UpdateBook(c *gin.Context) {
 	bookID := c.Param("id")
 	var updateData struct {
-		Title    string `json:"title"`
-		Author   string `json:"author"`
-		ISBN     string `json:"isbn"`
-		Location string `json:"location"`
+		Title       string `json:"title"`
+		Author      string `json:"author"`
+		ISBN        string `json:"isbn"`
+		Location    string `json:"location"`
+		TotalCopies int    `json:"total_copies"` // ← 追加
 	}
 
 	if err := c.ShouldBindJSON(&updateData); err != nil {
@@ -523,16 +551,96 @@ func UpdateBook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "タイトルと著者は必須です"})
 		return
 	}
+	if updateData.TotalCopies < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "複製数は1以上である必要があります"})
+		return
+	}
+
+	// 現在の複製数を取得
+	var currentCopies int
+	err := config.DB.QueryRow(`
+        SELECT total_copies FROM books WHERE id = $1
+    `, bookID).Scan(&currentCopies)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "現在の複製数の取得に失敗しました"})
+		return
+	}
+
+	// トランザクション開始
+	tx, err := config.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "トランザクション開始失敗"})
+		return
+	}
+	defer tx.Rollback()
 
 	// 書籍情報を更新
-	_, err := config.DB.Exec(`
+	_, err = tx.Exec(`
         UPDATE books 
-        SET title = $1, author = $2, isbn = $3, location = $4, updated_at = $5
-        WHERE id = $6
-    `, updateData.Title, updateData.Author, updateData.ISBN, updateData.Location, time.Now(), bookID)
+        SET title = $1, author = $2, isbn = $3, location = $4, total_copies = $5, updated_at = $6
+        WHERE id = $7
+    `, updateData.Title, updateData.Author, updateData.ISBN, updateData.Location, updateData.TotalCopies, time.Now(), bookID)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍情報の更新に失敗しました"})
+		return
+	}
+
+	// 複製数の変更処理
+	if updateData.TotalCopies != currentCopies {
+		if updateData.TotalCopies > currentCopies {
+			// 複製数を増やす場合：新しいbook_copiesを作成
+			for i := currentCopies; i < updateData.TotalCopies; i++ {
+				copyID := uuid.New()
+				serialNumber := bookID[:8] + "-" + uuid.New().String()[:4]
+				_, err = tx.Exec(`
+                    INSERT INTO book_copies (id, book_id, serial_number, barcode, is_available, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                `, copyID, bookID, serialNumber, updateData.ISBN, true, time.Now(), time.Now())
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍コピーの作成に失敗しました"})
+					return
+				}
+			}
+		} else {
+			// 複製数を減らす場合：利用可能なbook_copiesを削除
+			deleteCount := currentCopies - updateData.TotalCopies
+
+			// 利用可能な（貸出中でない）コピーの数を確認
+			var availableCopiesCount int
+			err = tx.QueryRow(`
+                SELECT COUNT(*) FROM book_copies 
+                WHERE book_id = $1 AND is_available = true
+            `, bookID).Scan(&availableCopiesCount)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "利用可能なコピー数の取得に失敗しました"})
+				return
+			}
+
+			if deleteCount > availableCopiesCount {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "貸出中のコピーがあるため、指定した数まで削除できません"})
+				return
+			}
+
+			// 利用可能なコピーを削除
+			_, err = tx.Exec(`
+                DELETE FROM book_copies 
+                WHERE id IN (
+                    SELECT id FROM book_copies 
+                    WHERE book_id = $1 AND is_available = true 
+                    LIMIT $2
+                )
+            `, bookID, deleteCount)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "書籍コピーの削除に失敗しました"})
+				return
+			}
+		}
+	}
+
+	// トランザクションをコミット
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "変更のコミットに失敗しました"})
 		return
 	}
 
