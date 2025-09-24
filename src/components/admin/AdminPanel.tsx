@@ -1,32 +1,43 @@
 import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import BookRegistration from './BookRegistration';
 import UserRegistration from './UserRegistration';
+import BarcodeGenerator from './BarcodeGenerator'; // 追加
 
 const AdminPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('book-registration');
-  
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-          管理者パネル
-        </h1>
+  const [activeTab, setActiveTab] = useState<'register' | 'users' | 'barcode'>('register');
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="book-registration">蔵書登録</TabsTrigger>
-            <TabsTrigger value="user-registration">ユーザー管理</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="book-registration">
-            <BookRegistration />
-          </TabsContent>
-          
-          <TabsContent value="user-registration">
-            <UserRegistration />
-          </TabsContent>
-        </Tabs>
+  const tabs = [
+    { id: 'register', label: '📚 アイテム登録', component: BookRegistration },
+    { id: 'users', label: '👥 ユーザー管理', component: UserRegistration },
+    { id: 'barcode', label: '🏷️ バーコード生成', component: BarcodeGenerator }, // 追加
+  ];
+
+  const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component || BookRegistration;
+
+  return (
+    <div className="space-y-6">
+      {/* タブナビゲーション */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex space-x-8">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === tab.id
+                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* タブコンテンツ */}
+      <div>
+        <ActiveComponent />
       </div>
     </div>
   );

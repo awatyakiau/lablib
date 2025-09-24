@@ -61,6 +61,12 @@ func main() {
 			admin.DELETE("/users/:id", api.DeleteUser)
 			admin.GET("/users", api.GetUsers)
 			admin.GET("/rankings", api.GetMonthlyRankings)
+
+			// バーコード生成機能
+			admin.POST("/barcode/generate-thesis", api.GenerateThesisBarcode)
+			admin.GET("/barcode/saved", api.GetSavedBarcodes)
+			admin.GET("/barcode/download/:filename", api.DownloadBarcodeImage)
+			admin.DELETE("/barcode/:filename", api.DeleteBarcodeImage)
 		}
 	}
 

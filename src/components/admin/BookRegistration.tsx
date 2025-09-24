@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { BookPlus, Save, Trash, Search, Loader2 } from 'lucide-react';
+import { BookPlus, Save, Trash, Search, Loader2, Download, QrCode } from 'lucide-react';
 import BarcodeScanner from '../books/BarcodeScanner';
-import { BookPlus, Save, Trash } from 'lucide-react';
 import axios from 'axios';
 
 interface FormData {
@@ -28,6 +27,14 @@ const BookRegistration: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // EAN13バーコード生成用の新しいstate
+  const [showEAN13Generator, setShowEAN13Generator] = useState(false);
+  const [generatedBarcode, setGeneratedBarcode] = useState<any>(null);
+  const [studentId, setStudentId] = useState('');
+  const [barcodeYear, setBarcodeYear] = useState(new Date().getFullYear());
+  const [barcodeSequence, setBarcodeSequence] = useState(1);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -39,22 +46,30 @@ const BookRegistration: React.FC = () => {
   };
   
   const handleBarcodeScanned = (barcode: string) => {
-    // For demo purposes, we'll assume all barcodes starting with 9 are ISBNs
-    if (barcode.startsWith('9') && barcode.length >= 10) {
-      setFormData(prev => ({
-        ...prev,
-        barcode,
-        isbn: barcode,
-        type: 'book'
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        barcode,
-        type: 'thesis'
-      }));
-    }
-  };
+  // ISBN-13判定の改善
+  if (barcode.length === 13 && (barcode.startsWith('978') || barcode.startsWith('979'))) {
+    // ISBN-13の場合
+    setFormData(prev => ({
+      ...prev,
+      barcode,
+      isbn: barcode,
+      type: 'book'
+    }));
+  } else if (barcode.length === 13 && barcode.startsWith('20')) {
+    // 生成された論文用EAN13バーコードの場合
+    setFormData(prev => ({
+      ...prev,
+      barcode,
+      type: 'thesis'
+    }));
+  } else {
+    // その他のバーコード
+    setFormData(prev => ({
+      ...prev,
+      barcode
+    }));
+  }
+};
   
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -338,22 +353,6 @@ const handleSubmit = async (e: React.FormEvent) => {
         </div>
       </form>
       
-      <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-          バーコード生成
-        </h3>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          論文や独自資料には自動生成されたバーコードを使用できます。
-        </p>
-        
-        <button
-          type="button"
-          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
-        >
-          <BookPlus className="mr-2 h-4 w-4" />
-          バーコード生成
-        </button>
-      </div>
     </div>
   );
 };
