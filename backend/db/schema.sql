@@ -78,4 +78,4 @@ CREATE INDEX IF NOT EXISTS idx_book_copies_book_id ON book_copies(book_id);
 CREATE INDEX IF NOT EXISTS idx_borrow_records_user_id ON borrow_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_borrow_records_book_copy_id ON borrow_records(book_copy_id);
 CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_id ON admin_logs(admin_id);
-CREATE INDEX IF NOT EXISTS idx_monthly_rankings_month ON monthly_rankings(month); 
+CREATE INDEX IF NOT EXISTS idx_monthly_rankings_month ON monthly_rankings(month);
