@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BookPlus, Save, Trash, Search, Loader2, Download, QrCode } from 'lucide-react';
 import BarcodeScanner from '../books/BarcodeScanner';
 import axios from 'axios';
+import { Save, Search, Loader2, X } from 'lucide-react';
 
 interface FormData {
   title: string;
@@ -21,102 +22,131 @@ const BookRegistration: React.FC = () => {
     barcode: '',
     isbn: '',
     location: '',
-    copies: 1
+    copies: 1,
   });
-  
-  const [success, setSuccess] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+
+  const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  
-  // EAN13バーコード生成用の新しいstate
-  const [showEAN13Generator, setShowEAN13Generator] = useState(false);
-  const [generatedBarcode, setGeneratedBarcode] = useState<any>(null);
-  const [studentId, setStudentId] = useState('');
-  const [barcodeYear, setBarcodeYear] = useState(new Date().getFullYear());
-  const [barcodeSequence, setBarcodeSequence] = useState(1);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'copies' ? parseInt(value) || 1 : value
+      [name]: name === 'copies' ? parseInt(value) || 1 : value,
     }));
   };
-  
-  const handleBarcodeScanned = (barcode: string) => {
-  // ISBN-13判定の改善
-  if (barcode.length === 13 && (barcode.startsWith('978') || barcode.startsWith('979'))) {
-    // ISBN-13の場合
-    setFormData(prev => ({
-      ...prev,
-      barcode,
-      isbn: barcode,
-      type: 'book'
-    }));
-  } else if (barcode.length === 13 && barcode.startsWith('20')) {
-    // 生成された論文用EAN13バーコードの場合
-    setFormData(prev => ({
-      ...prev,
-      barcode,
-      type: 'thesis'
-    }));
-  } else {
-    // その他のバーコード
-    setFormData(prev => ({
-      ...prev,
-      barcode
-    }));
-  }
-};
-  
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
 
-  // Validation
-  if (!formData.title.trim()) {
-    setError('タイトルを入力してください');
-    return;
-  }
-  if (!formData.author.trim()) {
-    setError('著者を入力してください');
-    return;
-  }
-  if (!formData.barcode.trim()) {
-    setError('バーコードを入力してください');
-    return;
-  }
-  if (!formData.location.trim()) {
-    setError('保管場所を入力してください');
-    return;
-  }
+  const handleAutoSearch = async () => {
+    if (!formData.isbn) return;
 
-  try {
-    const token = localStorage.getItem('token');
-    const response = await axios.post(
-      '/api/admin/books',
-      {
-        title: formData.title,
-        author: formData.author,
-        type: formData.type,
-        barcode: formData.barcode,
-        isbn: formData.isbn,
-        location: formData.location,
-        total_copies: formData.copies,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    setSuccess('アイテムが正常に登録されました');
+    setIsSearching(true);
     setError(null);
 
-    // Reset form after a delay
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/books/fetch-info', {
+        params: { isbn: formData.isbn },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.data) {
+        setFormData(prev => ({
+          ...prev,
+          title: response.data.title || prev.title,
+          author: response.data.author || prev.author,
+        }));
+        setSuccess('書籍情報を取得しました');
+        setTimeout(() => setSuccess(null), 2000);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || '書籍情報の取得に失敗しました');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setSelectedImage(null);
+      setImagePreview(null);
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('ファイルサイズが大きすぎます（最大5MB）');
+      return;
+    }
+
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
+      setError('サポートされていない画像形式です（JPEG, PNG, WebP のみ）');
+      return;
+    }
+
+    setSelectedImage(file);
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.title.trim() || !formData.author.trim()) {
+      setError('タイトルと著者は必須です');
+      return;
+    }
+
+    if (formData.copies < 1) {
+      setError('複製数は1以上である必要があります');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await axios.post('/api/admin/books', {
+        ...formData,
+        total_copies: formData.copies,
+      }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (selectedImage && response.data.id) {
+        try {
+          const imageFormData = new FormData();
+          imageFormData.append('image', selectedImage);
+
+          await axios.post(`/api/admin/books/${response.data.id}/image`, imageFormData, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+        } catch (imgErr) {
+          console.error('画像のアップロードに失敗しました:', imgErr);
+        }
+      }
+
+      setSuccess('書籍を登録しました');
+      
       setFormData({
         title: '',
         author: '',
@@ -126,233 +156,225 @@ const handleSubmit = async (e: React.FormEvent) => {
         location: '',
         copies: 1,
       });
-      setSuccess(null);
-    }, 3000);
-  } catch (err: any) {
-    if (err.response?.data?.error) {
-      setError(err.response.data.error);
-    } else {
-      setError('登録に失敗しました');
-    }
-  }
-};
+      setSelectedImage(null);
+      setImagePreview(null);
 
-  
-  const handleReset = () => {
-    setFormData({
-      title: '',
-      author: '',
-      type: 'book',
-      barcode: '',
-      isbn: '',
-      location: '',
-      copies: 1
-    });
-    setError(null);
-    setSuccess(null);
-  };
-
-    const handleAutoSearch = async () => {
-    if (!formData.isbn && !formData.barcode) {
-      setError('ISBNまたはバーコードを入力してください');
-      return;
-    }
-
-    setIsSearching(true);
-    setError(null);
-
-    try {
-      const isbn = formData.isbn || formData.barcode;
-      const response = await axios.get(`/api/books/fetch-info?isbn=${isbn}`);
-      
-      setFormData(prev => ({
-        ...prev,
-        title: response.data.title || prev.title,
-        author: response.data.author || prev.author,
-      }));
-
-      setSuccess('書籍情報を自動取得しました');
-      setTimeout(() => setSuccess(null), 3000);
+      setTimeout(() => {
+        setSuccess(null);
+        window.location.reload();
+      }, 1500);
     } catch (err: any) {
-      if (err.response?.status === 404) {
-        setError('書籍情報が見つかりませんでした');
-      } else {
-        setError('書籍情報の取得に失敗しました');
-      }
+      setError(err.response?.data?.error || '登録に失敗しました');
     } finally {
-      setIsSearching(false);
+      setIsLoading(false);
     }
   };
-  
+
   return (
-    <div>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-        新規アイテム登録
+        書籍登録
       </h2>
-      
-      <div className="mb-6">
-        <BarcodeScanner onScan={handleBarcodeScanned} buttonText="バーコードをスキャン" />
-      </div>
-      
-      {success && (
-        <div className="mb-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-md text-sm">
-          {success}
-        </div>
-      )}
-      
+
       {error && (
-        <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md text-sm">
+        <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md">
           {error}
         </div>
       )}
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              種別
-            </label>
-            <select
-              id="type"
-              name="type"
-              value={formData.type}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="book">図書</option>
-              <option value="thesis">論文</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="barcode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              バーコード
-            </label>
-            <input
-              id="barcode"
-              name="barcode"
-              type="text"
-              value={formData.barcode}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-              placeholder="バーコード"
-            />
-          </div>
+
+      {success && (
+        <div className="mb-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-md">
+          {success}
         </div>
-        
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            タイトル
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            タイトル <span className="text-red-500">*</span>
           </label>
           <input
-            id="title"
             name="title"
             type="text"
             value={formData.title}
             onChange={handleInputChange}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-            placeholder="タイトル"
+            placeholder="書籍のタイトル"
+            required
           />
         </div>
-        
+
         <div>
-          <label htmlFor="author" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            著者
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            著者 <span className="text-red-500">*</span>
           </label>
           <input
-            id="author"
             name="author"
             type="text"
             value={formData.author}
             onChange={handleInputChange}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-            placeholder="著者"
+            placeholder="著者名"
+            required
           />
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {formData.type === 'book' && (
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            種類 <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="type"
+            value={formData.type}
+            onChange={handleInputChange}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+            required
+          >
+            <option value="book">書籍</option>
+            <option value="thesis">論文</option>
+          </select>
+        </div>
+
+        {formData.type === 'book' && (
           <div>
-            <label htmlFor="isbn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              ISBN
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              ISBN <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-2">
+            <div className="flex space-x-2">
               <input
-                id="isbn"
                 name="isbn"
                 type="text"
                 value={formData.isbn}
                 onChange={handleInputChange}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                placeholder="ISBN"
+                placeholder="13桁のISBN"
               />
               <button
                 type="button"
                 onClick={handleAutoSearch}
-                disabled={isSearching || (!formData.isbn && !formData.barcode)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={!formData.isbn || isSearching}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
               >
                 {isSearching ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Search className="h-4 w-4" />
                 )}
-                <span className="ml-2">自動検索</span>
               </button>
             </div>
           </div>
         )}
-          
-          <div>
-            <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              保管場所
-            </label>
-            <input
-              id="location"
-              name="location"
-              type="text"
-              value={formData.location}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-              placeholder="保管場所（例：本棚A-1）"
-            />
-          </div>
-        </div>
-        
+
         <div>
-          <label htmlFor="copies" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            複製数
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            保管場所 <span className="text-red-500">*</span>
           </label>
           <input
-            id="copies"
+            name="location"
+            type="text"
+            value={formData.location}
+            onChange={handleInputChange}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+            placeholder="例: 書庫A-1"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            表紙画像 <span className="text-gray-500 text-xs">(任意)</span>
+          </label>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <label className="flex-1 cursor-pointer">
+                <div className="flex items-center justify-center w-full px-4 py-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-md hover:border-indigo-500 transition-colors">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {selectedImage ? selectedImage.name : '📷 画像を選択'}
+                  </span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageChange}
+                  disabled={isLoading}
+                  className="hidden"
+                />
+              </label>
+              {selectedImage && (
+                <button
+                  type="button"
+                  onClick={clearImage}
+                  className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                  title="画像を削除"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              JPEG, PNG, WebP形式、最大5MB
+            </p>
+    
+            {imagePreview && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">プレビュー:</p>
+                <img
+                  src={imagePreview}
+                  alt="プレビュー"
+                  className="max-w-xs max-h-48 object-cover rounded-lg shadow-md"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            バーコード <span className="text-red-500">*</span>
+          </label>
+          <input
+            name="barcode"
+            type="text"
+            value={formData.barcode}
+            onChange={handleInputChange}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+            placeholder="13桁のバーコード"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            複製数 <span className="text-red-500">*</span>
+          </label>
+          <input
             name="copies"
             type="number"
             min="1"
             value={formData.copies}
             onChange={handleInputChange}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+            required
           />
         </div>
-        
-        <div className="flex justify-end space-x-3 pt-4">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <Trash className="mr-2 h-4 w-4" />
-            リセット
-          </button>
-          <button
-            type="submit"
-            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <Save className="mr-2 h-4 w-4" />
-            登録
-          </button>
-        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              登録中...
+            </>
+          ) : (
+            <>
+              <Save className="h-5 w-5 mr-2" />
+              登録
+            </>
+          )}
+        </button>
       </form>
-      
     </div>
   );
 };
