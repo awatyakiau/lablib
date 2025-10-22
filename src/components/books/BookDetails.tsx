@@ -56,6 +56,21 @@ const BookDetails: React.FC<BookDetailsProps> = ({ item, borrowingHistory }) => 
           {item.author}
         </p>
         
+        {/* 書籍画像表示 */}
+        {item.image_path && (
+          <div className="mb-6">
+            <img
+              src={`/api/books/${item.id}/image`}
+              alt={`${item.title}の表紙`}
+              className="max-w-xs max-h-64 object-cover rounded-lg shadow-md mx-auto block"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+              }}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="space-y-3">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">

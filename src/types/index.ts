@@ -31,6 +31,7 @@ export interface LibraryItem {
   borrowedBy?: string;
   borrowedAt?: string;
   dueDate?: string;
+  image_path?: string;
 }
 
 export interface BorrowingRecord {

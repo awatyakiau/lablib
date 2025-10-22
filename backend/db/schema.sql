@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS books (
     total_copies INTEGER NOT NULL,
     barcode TEXT,
     location TEXT,
+    image_path TEXT,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );

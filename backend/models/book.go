@@ -15,8 +15,9 @@ type Book struct {
 	EAN13       string    `json:"ean13"`
 	Type        string    `json:"type"`
 	TotalCopies int       `json:"total_copies"`
-	Barcode     string    `json:"barcode"`  // ← 追加
-	Location    string    `json:"location"` // ← 追加
+	Barcode     string    `json:"barcode"`
+	Location    string    `json:"location"`
+	ImagePath   string    `json:"image_path"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

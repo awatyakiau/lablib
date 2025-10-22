@@ -18,16 +18,16 @@ import (
 func GetBooks(c *gin.Context) {
 	query := c.Query("query")
 	rows, err := config.DB.Query(`
-        SELECT
-            b.id, b.title, b.author, b.isbn, b.jan, b.ean13, b.type, b.total_copies,
-            b.barcode, b.location, b.created_at, b.updated_at,
-            COUNT(bc.id) FILTER (WHERE bc.is_available = true) AS available_copies
-        FROM books b
-        LEFT JOIN book_copies bc ON bc.book_id = b.id
-        WHERE b.title ILIKE $1 OR b.author ILIKE $1 OR b.isbn ILIKE $1 OR b.jan ILIKE $1 OR b.ean13 ILIKE $1
-        GROUP BY b.id
-        ORDER BY b.title
-    `, "%"+query+"%")
+    SELECT
+        b.id, b.title, b.author, b.isbn, b.jan, b.ean13, b.type, b.total_copies,
+        b.barcode, b.location, b.image_path, b.created_at, b.updated_at,
+        COUNT(bc.id) FILTER (WHERE bc.is_available = true) AS available_copies
+    FROM books b
+    LEFT JOIN book_copies bc ON bc.book_id = b.id
+    WHERE b.title ILIKE $1 OR b.author ILIKE $1 OR b.isbn ILIKE $1 OR b.jan ILIKE $1 OR b.ean13 ILIKE $1
+    GROUP BY b.id
+    ORDER BY b.title
+`, "%"+query+"%")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
@@ -37,12 +37,12 @@ func GetBooks(c *gin.Context) {
 	var books []map[string]interface{}
 	for rows.Next() {
 		var book models.Book
-		var barcode, location sql.NullString
+		var barcode, location, imagePath sql.NullString
 		var availableCopies int
 		err := rows.Scan(
 			&book.ID, &book.Title, &book.Author, &book.ISBN,
 			&book.JAN, &book.EAN13, &book.Type, &book.TotalCopies,
-			&barcode, &location, &book.CreatedAt, &book.UpdatedAt, &availableCopies,
+			&barcode, &location, &imagePath, &book.CreatedAt, &book.UpdatedAt, &availableCopies,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning books"})
@@ -59,6 +59,7 @@ func GetBooks(c *gin.Context) {
 			"total_copies": book.TotalCopies,
 			"barcode":      barcode.String,
 			"location":     location.String,
+			"image_path":   imagePath.String,
 			"created_at":   book.CreatedAt,
 			"updated_at":   book.UpdatedAt,
 			"available":    availableCopies > 0,
@@ -71,15 +72,15 @@ func GetBooks(c *gin.Context) {
 func GetBookDetails(c *gin.Context) {
 	bookID := c.Param("id")
 	var book models.Book
-	var barcode, location sql.NullString
+	var barcode, location, imagePath sql.NullString
 	err := config.DB.QueryRow(`
-        SELECT id, title, author, isbn, jan, ean13, type, total_copies, barcode, location, created_at, updated_at
-        FROM books
-        WHERE id = $1
-    `, bookID).Scan(
+    	SELECT id, title, author, isbn, jan, ean13, type, total_copies, barcode, location, image_path, created_at, updated_at
+    	FROM books
+    	WHERE id = $1
+	`, bookID).Scan(
 		&book.ID, &book.Title, &book.Author, &book.ISBN,
 		&book.JAN, &book.EAN13, &book.Type, &book.TotalCopies,
-		&barcode, &location, &book.CreatedAt, &book.UpdatedAt,
+		&barcode, &location, &imagePath, &book.CreatedAt, &book.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Book not found"})
@@ -175,6 +176,7 @@ func GetBookDetails(c *gin.Context) {
 		"total_copies": book.TotalCopies,
 		"barcode":      barcode.String,
 		"location":     location.String,
+		"image_path":   imagePath.String,
 		"created_at":   book.CreatedAt,
 		"updated_at":   book.UpdatedAt,
 		"available":    availableCopies > 0,

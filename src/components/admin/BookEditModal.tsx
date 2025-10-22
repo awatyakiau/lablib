@@ -22,6 +22,8 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   useEffect(() => {
     if (book) {
@@ -51,7 +53,7 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
 
     try {
       const response = await axios.get(`/api/books/fetch-info?isbn=${formData.isbn}`);
-      
+
       setFormData(prev => ({
         ...prev,
         title: response.data.title || prev.title,
@@ -73,7 +75,7 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-  
+
   if (!formData.title.trim() || !formData.author.trim()) {
     setError('タイトルと著者は必須です');
     return;
@@ -106,6 +108,53 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
       setIsLoading(false);
     }
   };
+
+  const handleImageUpload = async (file: File) => {
+  setIsUploadingImage(true);
+  setError(null);
+
+  try {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('image', file);
+
+    await axios.post(`/api/admin/books/${book.id}/image`, formData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    setSuccess('画像をアップロードしました');
+    setTimeout(() => {
+      onUpdate();
+      setSuccess(null);
+    }, 2000);
+  } catch (err: any) {
+    setError(err.response?.data?.error || '画像のアップロードに失敗しました');
+  } finally {
+    setIsUploadingImage(false);
+    setSelectedImage(null);
+  }
+};
+
+const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (file) {
+    if (file.size > 5 * 1024 * 1024) {
+      setError('ファイルサイズが大きすぎます（最大5MB）');
+      return;
+    }
+
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
+      setError('サポートされていない画像形式です（JPEG, PNG, WebP のみ）');
+      return;
+    }
+
+    setSelectedImage(file);
+    handleImageUpload(file);
+  }
+};
 
   if (!isOpen) return null;
 
@@ -204,6 +253,23 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
               value={formData.location}
               onChange={handleInputChange}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              表紙画像（JPEG/PNG/WebP, 5MBまで）
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleImageChange}
+              disabled={isUploadingImage}
+              className="w-full text-sm file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100"
             />
           </div>
 

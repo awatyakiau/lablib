@@ -45,6 +45,7 @@ func main() {
 		auth.GET("/books", api.GetBooks)
 		auth.GET("/books/fetch-info", api.FetchBookInfo)
 		auth.GET("/books/:id", api.GetBookDetails)
+		auth.GET("/books/:id/image", api.GetBookImage)
 		auth.GET("/books/borrow-record/:id", api.GetBorrowRecordDetails)
 		auth.POST("/books/borrow", api.BorrowBook)
 		auth.POST("/books/return", api.ReturnBook)
@@ -67,6 +68,10 @@ func main() {
 			admin.GET("/barcode/saved", api.GetSavedBarcodes)
 			admin.GET("/barcode/download/:filename", api.DownloadBarcodeImage)
 			admin.DELETE("/barcode/:filename", api.DeleteBarcodeImage)
+
+			// 書籍画像管理機能（追加）
+			admin.POST("/books/:id/image", api.UploadBookImage)
+			admin.DELETE("/books/:id/image", api.DeleteBookImage)
 		}
 	}
 
