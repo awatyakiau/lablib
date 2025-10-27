@@ -1,7 +1,11 @@
 package api
 
 import (
+	"database/sql"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"lablib/config"
@@ -85,44 +89,117 @@ func CreateBook(c *gin.Context) {
 	c.JSON(http.StatusOK, book)
 }
 
+// DeleteBook - 書籍削除(管理者のみ)
 func DeleteBook(c *gin.Context) {
-	bookID := c.PostForm("book_id")
+	bookID := c.Param("id")
+
+	// UUIDの検証
+	if _, err := uuid.Parse(bookID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid book ID"})
+		return
+	}
 
 	// トランザクション開始
 	tx, err := config.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not start transaction"})
+		log.Printf("Transaction start error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
 		return
 	}
 	defer tx.Rollback()
 
-	// 書籍の削除
-	_, err = tx.Exec("DELETE FROM books WHERE id = $1", bookID)
+	// 書籍の存在確認
+	var exists bool
+	err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM books WHERE id = $1)", bookID).Scan(&exists)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error deleting book"})
+		log.Printf("Book existence check error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Book not found"})
 		return
 	}
 
-	// 管理者ログの記録
-	/*
-		_, err = tx.Exec(`
-			INSERT INTO admin_logs (id, action, target_id, created_at)
-			VALUES ($1, $2, $3, $4, $5)
-		`,
-			uuid.New(), "delete_book", bookID, time.Now(),
-		)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating admin log"})
-			return
-		}*/
+	// 貸出中の書籍があるか確認（テーブル名を borrow_records に修正）
+	var borrowedCount int
+	err = tx.QueryRow(`
+        SELECT COUNT(*) 
+        FROM borrow_records br
+        JOIN book_copies bc ON br.book_copy_id = bc.id
+        WHERE bc.book_id = $1 AND br.returned_at IS NULL
+    `, bookID).Scan(&borrowedCount)
 
-	// トランザクションのコミット
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error committing transaction"})
+	if err != nil {
+		log.Printf("Borrowed count check error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+	if borrowedCount > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "貸出中の書籍は削除できません"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Book deleted successfully"})
+	// 画像ファイルの削除
+	var imagePath sql.NullString
+	err = tx.QueryRow("SELECT image_path FROM books WHERE id = $1", bookID).Scan(&imagePath)
+	if err == nil && imagePath.Valid && imagePath.String != "" {
+		fullPath := filepath.Join("./public/images/books", imagePath.String)
+		if err := os.Remove(fullPath); err != nil {
+			log.Printf("Image deletion warning: %v", err)
+		}
+	}
+
+	// 返却済みの貸出履歴を削除（テーブル名を borrow_records に修正）
+	_, err = tx.Exec(`
+        DELETE FROM borrow_records 
+        WHERE book_copy_id IN (
+            SELECT id FROM book_copies WHERE book_id = $1
+        ) AND returned_at IS NOT NULL
+    `, bookID)
+	if err != nil {
+		log.Printf("Borrow records deletion error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete borrow records"})
+		return
+	}
+
+	// 月間ランキングデータの削除
+	_, err = tx.Exec("DELETE FROM monthly_rankings WHERE book_id = $1", bookID)
+	if err != nil {
+		log.Printf("Monthly rankings deletion warning: %v", err)
+	}
+
+	// book_copiesの削除
+	_, err = tx.Exec("DELETE FROM book_copies WHERE book_id = $1", bookID)
+	if err != nil {
+		log.Printf("Book copies deletion error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete book copies"})
+		return
+	}
+
+	// 書籍本体の削除
+	result, err := tx.Exec("DELETE FROM books WHERE id = $1", bookID)
+	if err != nil {
+		log.Printf("Book deletion error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete book"})
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Book not found"})
+		return
+	}
+
+	// トランザクションコミット
+	if err = tx.Commit(); err != nil {
+		log.Printf("Transaction commit error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
+
+	log.Printf("Book deleted successfully: %s", bookID)
+	c.JSON(http.StatusOK, gin.H{"message": "書籍を削除しました"})
 }
 
 func CreateUser(c *gin.Context) {

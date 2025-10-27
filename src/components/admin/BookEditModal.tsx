@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Search, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
 import { LibraryItem } from '../../types';
+import { X, Save, Loader2, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
 interface BookEditModalProps {
@@ -12,80 +12,80 @@ interface BookEditModalProps {
 
 const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, onUpdate }) => {
   const [formData, setFormData] = useState({
-    title: '',
-    author: '',
-    isbn: '',
-    location: '',
-    total_copies: 1,
+    title: book.title,
+    author: book.author,
+    isbn: book.isbn || '',
+    location: book.location || '',
+    barcode: book.barcode || '',
   });
+
   const [isLoading, setIsLoading] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  useEffect(() => {
-    if (book) {
-      setFormData({
-        title: book.title || '',
-        author: book.author || '',
-        isbn: book.isbn || '',
-        location: book.location || '',
-        total_copies: book.copies || 1,
-      });
-    }
-  }, [book]);
+  if (!isOpen) return null;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: name === 'total_copies' ? parseInt(value) || 1 : value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleAutoSearch = async () => {
-    if (!formData.isbn) {
-      setError('ISBNを入力してください');
-      return;
-    }
-
-    setIsSearching(true);
+  const handleImageUpload = async (file: File) => {
+    setIsUploadingImage(true);
     setError(null);
 
     try {
-      const response = await axios.get(`/api/books/fetch-info?isbn=${formData.isbn}`);
+      const token = localStorage.getItem('token');
+      const imageFormData = new FormData();
+      imageFormData.append('image', file);
 
-      setFormData(prev => ({
-        ...prev,
-        title: response.data.title || prev.title,
-        author: response.data.author || prev.author,
-      }));
+      await axios.post(`/api/admin/books/${book.id}/image`, imageFormData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-      setSuccess('書籍情報を自動取得しました');
-      setTimeout(() => setSuccess(null), 3000);
+      setSuccess('画像をアップロードしました');
+      setTimeout(() => {
+        onUpdate();
+        setSuccess(null);
+      }, 2000);
     } catch (err: any) {
-      if (err.response?.status === 404) {
-        setError('書籍情報が見つかりませんでした');
-      } else {
-        setError('書籍情報の取得に失敗しました');
-      }
+      setError(err.response?.data?.error || '画像のアップロードに失敗しました');
     } finally {
-      setIsSearching(false);
+      setIsUploadingImage(false);
+      setSelectedImage(null);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('ファイルサイズが大きすぎます（最大5MB）');
+        return;
+      }
+      
+      if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
+        setError('サポートされていない画像形式です（JPEG, PNG, WebP のみ）');
+        return;
+      }
+
+      setSelectedImage(file);
+      handleImageUpload(file);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-  if (!formData.title.trim() || !formData.author.trim()) {
-    setError('タイトルと著者は必須です');
-    return;
-  }
-
-  if (formData.total_copies < 1) {
-    setError('複製数は1以上である必要があります');
-    return;
-  }
-
     setIsLoading(true);
     setError(null);
 
@@ -97,11 +97,11 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
         },
       });
 
-      setSuccess('書籍情報が更新されました');
+      setSuccess('書籍情報を更新しました');
       setTimeout(() => {
         onUpdate();
         onClose();
-      }, 1000);
+      }, 1500);
     } catch (err: any) {
       setError(err.response?.data?.error || '更新に失敗しました');
     } finally {
@@ -109,209 +109,214 @@ const BookEditModal: React.FC<BookEditModalProps> = ({ book, isOpen, onClose, on
     }
   };
 
-  const handleImageUpload = async (file: File) => {
-  setIsUploadingImage(true);
-  setError(null);
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    setError(null);
 
-  try {
-    const token = localStorage.getItem('token');
-    const formData = new FormData();
-    formData.append('image', file);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`/api/admin/books/${book.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    await axios.post(`/api/admin/books/${book.id}/image`, formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    setSuccess('画像をアップロードしました');
-    setTimeout(() => {
-      onUpdate();
-      setSuccess(null);
-    }, 2000);
-  } catch (err: any) {
-    setError(err.response?.data?.error || '画像のアップロードに失敗しました');
-  } finally {
-    setIsUploadingImage(false);
-    setSelectedImage(null);
-  }
-};
-
-const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (file) {
-    if (file.size > 5 * 1024 * 1024) {
-      setError('ファイルサイズが大きすぎます（最大5MB）');
-      return;
+      setSuccess('書籍を削除しました');
+      setTimeout(() => {
+        onUpdate();
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '削除に失敗しました');
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeleting(false);
     }
-
-    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
-      setError('サポートされていない画像形式です（JPEG, PNG, WebP のみ）');
-      return;
-    }
-
-    setSelectedImage(file);
-    handleImageUpload(file);
-  }
-};
-
-  if (!isOpen) return null;
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            書籍情報編集
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {success && (
-          <div className="mb-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-md text-sm">
-            {success}
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              タイトル
-            </label>
-            <input
-              name="title"
-              type="text"
-              value={formData.title}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-              required
-            />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              書籍情報編集
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <X className="h-6 w-6" />
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              著者
-            </label>
-            <input
-              name="author"
-              type="text"
-              value={formData.author}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-              required
-            />
-          </div>
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md">
+              {error}
+            </div>
+          )}
 
-          {book.type === 'book' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                ISBN
-              </label>
-              <div className="flex gap-2">
-                <input
-                  name="isbn"
-                  type="text"
-                  value={formData.isbn}
-                  onChange={handleInputChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                />
+          {success && (
+            <div className="mb-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-md">
+              {success}
+            </div>
+          )}
+
+          {/* 削除確認ダイアログ */}
+          {showDeleteConfirm && (
+            <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-md">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
+                本当にこの書籍を削除しますか？この操作は取り消せません。
+              </p>
+              <div className="flex space-x-2">
                 <button
-                  type="button"
-                  onClick={handleAutoSearch}
-                  disabled={isSearching || !formData.isbn}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
                 >
-                  {isSearching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      削除中...
+                    </>
                   ) : (
-                    <Search className="h-4 w-4" />
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      削除を実行
+                    </>
                   )}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500"
+                >
+                  キャンセル
                 </button>
               </div>
             </div>
           )}
 
-                   <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              保管場所
-            </label>
-            <input
-              name="location"
-              type="text"
-              value={formData.location}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                タイトル <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="title"
+                type="text"
+                value={formData.title}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              表紙画像（JPEG/PNG/WebP, 5MBまで）
-            </label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleImageChange}
-              disabled={isUploadingImage}
-              className="w-full text-sm file:mr-4 file:py-2 file:px-4
-                        file:rounded-md file:border-0
-                        file:text-sm file:font-semibold
-                        file:bg-indigo-50 file:text-indigo-700
-                        hover:file:bg-indigo-100"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                著者 <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="author"
+                type="text"
+                value={formData.author}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              複製数
-            </label>
-            <input
-              name="total_copies"
-              type="number"
-              min="1"
-              value={formData.total_copies}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              ※複製数を減らす場合、貸出中でないコピーのみ削除されます
-            </p>
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                ISBN <span className="text-gray-500 text-xs">(任意)</span>
+              </label>
+              <input
+                name="isbn"
+                type="text"
+                value={formData.isbn}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+              />
+            </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-            >
-              キャンセル
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              更新
-            </button>
-          </div>
-        </form>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                保管場所 <span className="text-gray-500 text-xs">(任意)</span>
+              </label>
+              <input
+                name="location"
+                type="text"
+                value={formData.location}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                表紙画像 <span className="text-gray-500 text-xs">(任意)</span>
+              </label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleImageChange}
+                disabled={isUploadingImage}
+                className="w-full text-sm file:mr-4 file:py-2 file:px-4
+                           file:rounded-md file:border-0
+                           file:text-sm file:font-semibold
+                           file:bg-indigo-50 file:text-indigo-700
+                           hover:file:bg-indigo-100
+                           dark:file:bg-indigo-900 dark:file:text-indigo-200"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                JPEG, PNG, WebP形式、最大5MB
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                バーコード <span className="text-gray-500 text-xs">(任意)</span>
+              </label>
+              <input
+                name="barcode"
+                type="text"
+                value={formData.barcode}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="submit"
+                disabled={isLoading || isDeleting}
+                className="flex-1 py-2 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    更新中...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-5 w-5 mr-2" />
+                    更新
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isLoading || isDeleting || showDeleteConfirm}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+              >
+                <Trash2 className="h-5 w-5 mr-2" />
+                削除
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

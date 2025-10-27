@@ -57,7 +57,7 @@ func main() {
 		{
 			admin.POST("/books", api.CreateBook)
 			admin.PUT("/books/:id", api.UpdateBook)
-			admin.DELETE("/books", api.DeleteBook)
+			admin.DELETE("/books/:id", api.DeleteBook)
 			admin.POST("/users", api.CreateUser)
 			admin.DELETE("/users/:id", api.DeleteUser)
 			admin.GET("/users", api.GetUsers)
