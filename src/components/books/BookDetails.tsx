@@ -1,15 +1,48 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LibraryItem, BorrowingRecord } from '../../types';
-import { Book, FileText, User, Calendar, ArrowLeft } from 'lucide-react';
+import { Book, FileText, User, Calendar, ArrowLeft, BookCheck } from 'lucide-react';
 import { formatDate, isOverdue } from '../../utils/dates';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 interface BookDetailsProps {
   item: LibraryItem;
   borrowingHistory: BorrowingRecord[];
+  onBorrowSuccess?: () => void;
 }
 
-const BookDetails: React.FC<BookDetailsProps> = ({ item, borrowingHistory }) => {
+const BookDetails: React.FC<BookDetailsProps> = ({ item, borrowingHistory, onBorrowSuccess }) => {
+  const [isBorrowing, setIsBorrowing] = useState(false);
+  const [borrowError, setBorrowError] = useState<string | null>(null);
+  const [borrowSuccess, setBorrowSuccess] = useState<string | null>(null);
+
+  const handleQuickBorrow = async () => {
+    setIsBorrowing(true);
+    setBorrowError(null);
+    setBorrowSuccess(null);
+
+    try {
+      const response = await axios.post('/api/books/quick-borrow', {
+        book_id: item.id,
+      });
+
+      setBorrowSuccess(`貸出成功！返却期限: ${formatDate(response.data.due_date)}`);
+      
+      // 3秒後にリロードまたはコールバック実行
+      setTimeout(() => {
+        if (onBorrowSuccess) {
+          onBorrowSuccess();
+        } else {
+          window.location.reload();
+        }
+      }, 3000);
+    } catch (err: any) {
+      setBorrowError(err.response?.data?.error || '貸出に失敗しました');
+    } finally {
+      setIsBorrowing(false);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
       <div className="p-6">
@@ -32,11 +65,21 @@ const BookDetails: React.FC<BookDetailsProps> = ({ item, borrowingHistory }) => 
             {item.type === 'book' ? '図書' : '論文'}
           </span>
           
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center space-x-2">
             {item.available ? (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
-                貸出可
-              </span>
+              <>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+                  貸出可
+                </span>
+                <button
+                  onClick={handleQuickBorrow}
+                  disabled={isBorrowing}
+                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  <BookCheck className="h-4 w-4 mr-2" />
+                  {isBorrowing ? '貸出中...' : '貸出する'}
+                </button>
+              </>
             ) : (
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
                 item.dueDate && isOverdue(item.dueDate)
@@ -48,6 +91,18 @@ const BookDetails: React.FC<BookDetailsProps> = ({ item, borrowingHistory }) => 
             )}
           </div>
         </div>
+
+        {/* エラー・成功メッセージ */}
+        {borrowError && (
+          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md flex items-center">
+            <span className="text-sm">{borrowError}</span>
+          </div>
+        )}
+        {borrowSuccess && (
+          <div className="mb-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-md flex items-center">
+            <span className="text-sm">{borrowSuccess}</span>
+          </div>
+        )}
         
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
           {item.title}

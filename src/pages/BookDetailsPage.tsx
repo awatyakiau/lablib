@@ -11,25 +11,25 @@ const BookDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // 書籍詳細と貸出履歴をAPIから取得
+      const response = await axios.get(`/api/books/${id}`);
+      const { book, borrow_history } = response.data;
+
+      setItem(book);
+      setBorrowingHistory(borrow_history || []);
+    } catch (err) {
+      setError('データの取得中にエラーが発生しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // 書籍詳細と貸出履歴をAPIから取得
-        const response = await axios.get(`/api/books/${id}`);
-        const { book, borrow_history } = response.data;
-
-        setItem(book);
-        setBorrowingHistory(borrow_history || []);
-      } catch (err) {
-        setError('データの取得中にエラーが発生しました');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [id]);
 
@@ -49,7 +49,7 @@ const BookDetailsPage: React.FC = () => {
     );
   }
 
-  return <BookDetails item={item} borrowingHistory={borrowingHistory} />;
+  return <BookDetails item={item} borrowingHistory={borrowingHistory} onBorrowSuccess={fetchData} />;
 };
 
 export default BookDetailsPage;
