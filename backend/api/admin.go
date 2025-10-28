@@ -325,6 +325,7 @@ func DeleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
 
+// GetMonthlyRankings - 月間ランキング取得
 func GetMonthlyRankings(c *gin.Context) {
 	month := c.Query("month")
 	if month == "" {
@@ -338,28 +339,24 @@ func GetMonthlyRankings(c *gin.Context) {
         JOIN books b ON mr.book_id = b.id
         WHERE mr.month = $1
         ORDER BY mr.borrow_count DESC
-        LIMIT 10
+        LIMIT 100
     `, month)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching monthly rankings"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching rankings"})
 		return
 	}
 	defer rows.Close()
 
 	var rankings []map[string]interface{}
 	for rows.Next() {
-		var (
-			id, month, bookID       string
-			borrowCount             int
-			title, author, bookType string
-		)
+		var id, month, bookID, title, author, bookType string
+		var borrowCount int
 		err := rows.Scan(&id, &month, &bookID, &borrowCount, &title, &author, &bookType)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning monthly rankings"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning rankings"})
 			return
 		}
-
-		ranking := map[string]interface{}{
+		rankings = append(rankings, map[string]interface{}{
 			"id":           id,
 			"month":        month,
 			"book_id":      bookID,
@@ -367,8 +364,46 @@ func GetMonthlyRankings(c *gin.Context) {
 			"title":        title,
 			"author":       author,
 			"type":         bookType,
+		})
+	}
+
+	c.JSON(http.StatusOK, rankings)
+}
+
+// GetAllTimeRankings - 全期間ランキング取得
+func GetAllTimeRankings(c *gin.Context) {
+	rows, err := config.DB.Query(`
+        SELECT b.id, b.title, b.author, b.type,
+               COALESCE(SUM(mr.borrow_count), 0) as total_borrow_count
+        FROM books b
+        LEFT JOIN monthly_rankings mr ON b.id = mr.book_id
+        GROUP BY b.id, b.title, b.author, b.type
+        HAVING COALESCE(SUM(mr.borrow_count), 0) > 0
+        ORDER BY total_borrow_count DESC
+        LIMIT 100
+    `)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching all-time rankings"})
+		return
+	}
+	defer rows.Close()
+
+	var rankings []map[string]interface{}
+	for rows.Next() {
+		var bookID, title, author, bookType string
+		var totalBorrowCount int
+		err := rows.Scan(&bookID, &title, &author, &bookType, &totalBorrowCount)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error scanning rankings"})
+			return
 		}
-		rankings = append(rankings, ranking)
+		rankings = append(rankings, map[string]interface{}{
+			"book_id":      bookID,
+			"title":        title,
+			"author":       author,
+			"type":         bookType,
+			"borrow_count": totalBorrowCount,
+		})
 	}
 
 	c.JSON(http.StatusOK, rankings)

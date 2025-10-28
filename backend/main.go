@@ -63,6 +63,7 @@ func main() {
 			admin.DELETE("/users/:id", api.DeleteUser)
 			admin.GET("/users", api.GetUsers)
 			admin.GET("/rankings", api.GetMonthlyRankings)
+			admin.GET("/rankings/all-time", api.GetAllTimeRankings)
 
 			// バーコード生成機能
 			admin.POST("/barcode/generate-thesis", api.GenerateThesisBarcode)
